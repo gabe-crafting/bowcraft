@@ -1,0 +1,26 @@
+{
+  "name": "bounty-hunter",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "packageManager": "bun@1.3.7",
+  "scripts": {
+    "dev": "bun scripts/dev.ts",
+    "build": "bun run --filter @bounty/shared typecheck && bun run --filter @bounty/server typecheck && bun run --filter @bounty/server build && bun run --filter @bounty/client build",
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/node": "^24.5.2",
+    "eslint": "^9.36.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.44.1"
+  }
+}

@@ -1,0 +1,11 @@
+---
+description: Update docs/class-map.md when classes or their fields change
+globs: "**/*.ts"
+alwaysApply: false
+---
+
+# Class map
+
+`docs/class-map.md` is the project diagram of classes, interfaces, and their fields.
+
+When a change adds, removes, or renames a class, interface, or field, update that file in the same change. Keep the mermaid diagrams and the ownership arrows in sync with the source. Do not list methods.
