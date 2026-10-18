@@ -1,5 +1,6 @@
 # TODO
 
+- Menu graphic refactor
 - Deployment
 - Lobby with servers and matches
 - Add classes
