@@ -1,5 +1,4 @@
-import { BOWS, type ProjectileSpec, type ShotArrow, type WeaponKind } from '@bounty/shared'
-import { planLaunch } from './ballistics'
+import { BOWS, planLaunch, type ProjectileSpec, type ShotArrow, type WeaponKind } from '@bounty/shared'
 import { Projectile } from './Projectile'
 
 let nextWeaponId = 1

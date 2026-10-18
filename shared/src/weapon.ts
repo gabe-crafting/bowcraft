@@ -1,18 +1,16 @@
 import {
+  ARROW_FALL_SECONDS,
   EXPLOSION_RADIUS,
   LONGBOW_COOLDOWN_MS,
   LONGBOW_DAMAGE,
-  LONGBOW_RANGE,
   LONGBOW_SPEED,
   PROJECTILE_RADIUS,
   RECURVE_COOLDOWN_MS,
   RECURVE_DAMAGE,
-  RECURVE_RANGE,
-  RECURVE_SPEED,
+  RECURVE_POWER,
   SHORTBOW_COOLDOWN_MS,
   SHORTBOW_DAMAGE,
-  SHORTBOW_RANGE,
-  SHORTBOW_SPEED,
+  SHORTBOW_POWER,
 } from './constants'
 
 /**
@@ -20,11 +18,14 @@ import {
  * `explodes` deals splash damage when the arrow hits the ground, a wall, a tree, or a hunter.
  * `penetrates` lets the arrow pass walls and trunks; it still stops at max range and on players.
  * `ricochets` bounces off walls, trunks, and the arena edge.
- * `flat` flies along the facing and drops. `lob` drops on the click. `hook` can bend once around cover.
+ * `power` sets speed and distance for a forward bow. A longbow's power is infinite and does not set its speed.
+ * `flat` flies along the facing and drops. `lob` drops on the click. `hook` bends once around cover, still along the facing.
  */
 export type Trajectory = 'flat' | 'lob' | 'hook'
 
 export interface ProjectileSpec {
+  /** Forward bows turn this into speed and distance. Longbow power is infinite. */
+  readonly power: number
   readonly speed: number
   readonly maxRange: number
   readonly damage: number
@@ -42,22 +43,23 @@ export type WeaponKind = 'longbow' | 'shortbow' | 'recurve'
 export const BOW_NAMES: Record<WeaponKind, { readonly name: string; readonly detail: string }> = {
   longbow: {
     name: 'Longbow',
-    detail: 'Lofts the arrow so it falls on the spot you click.',
+    detail: 'Lofts the arrow onto any spot you click. Its speed stays the same however far that is.',
   },
   shortbow: {
     name: 'Shortbow',
-    detail: 'Shoots straight where you face. The arrow drops after a short flight.',
+    detail: 'Shoots straight ahead. Power sets how fast the arrow flies and where it drops.',
   },
   recurve: {
     name: 'Recurve',
-    detail: 'Curves onto your click. Hooks once around a wall, with a longer reach and a slower draw.',
+    detail: 'Shoots ahead with more power, so it flies faster and farther, and hooks once around a wall.',
   },
 }
 
 export const BOWS: Record<WeaponKind, ProjectileSpec> = {
   longbow: {
+    power: Number.POSITIVE_INFINITY,
     speed: LONGBOW_SPEED,
-    maxRange: LONGBOW_RANGE,
+    maxRange: Number.POSITIVE_INFINITY,
     damage: LONGBOW_DAMAGE,
     radius: PROJECTILE_RADIUS,
     explodes: false,
@@ -68,8 +70,9 @@ export const BOWS: Record<WeaponKind, ProjectileSpec> = {
     trajectory: 'lob',
   },
   shortbow: {
-    speed: SHORTBOW_SPEED,
-    maxRange: SHORTBOW_RANGE,
+    power: SHORTBOW_POWER,
+    speed: SHORTBOW_POWER,
+    maxRange: SHORTBOW_POWER * ARROW_FALL_SECONDS,
     damage: SHORTBOW_DAMAGE,
     radius: PROJECTILE_RADIUS,
     explodes: false,
@@ -80,8 +83,9 @@ export const BOWS: Record<WeaponKind, ProjectileSpec> = {
     trajectory: 'flat',
   },
   recurve: {
-    speed: RECURVE_SPEED,
-    maxRange: RECURVE_RANGE,
+    power: RECURVE_POWER,
+    speed: RECURVE_POWER,
+    maxRange: RECURVE_POWER * ARROW_FALL_SECONDS,
     damage: RECURVE_DAMAGE,
     radius: PROJECTILE_RADIUS,
     explodes: false,

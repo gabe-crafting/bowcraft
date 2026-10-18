@@ -27,6 +27,8 @@ export type WeaponAction = 'drop' | 'pickup'
 export interface ActionMessage {
   type: 'action'
   action: WeaponAction
+  /** Set when picking up one bow. Drop leaves this empty. */
+  weaponId: string | null
 }
 
 export type ClientMessage = JoinMessage | InputMessage | ActionMessage
@@ -171,8 +173,9 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
   }
 
   if (value.type === 'action') {
-    if (value.action !== 'drop' && value.action !== 'pickup') return null
-    return { type: 'action', action: value.action }
+    if (value.action === 'drop') return { type: 'action', action: 'drop', weaponId: null }
+    if (value.action !== 'pickup' || !isShortId(value.weaponId)) return null
+    return { type: 'action', action: 'pickup', weaponId: value.weaponId }
   }
 
   return null

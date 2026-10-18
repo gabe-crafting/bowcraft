@@ -21,7 +21,7 @@ export class JoinScreen {
     const hint = document.createElement('p')
     hint.className = 'hint'
     hint.textContent =
-      'WASD to move. Mouse to aim. Click to loose. Shortbows fly flat, longbows drop on the click, and recurves hook once around a wall. Q is a normal arrow. 1 ricochets, 2 explodes, 3 punches through, and 4 is a slow flare that lights a circle until it lands. Hold M for the weapon menu. You only see ahead of you. Walls and trees block that view. A bush hides you until you loose an arrow.'
+      'WASD to move. Mouse to aim. Click to loose. A shortbow and a recurve shoot ahead, and bow power sets their speed and distance. A longbow lofts onto any spot you click. Q is a normal arrow. 1 ricochets, 2 explodes, 3 punches through, and 4 lights a circle until it lands. Hold E for the weapon menu. You only see ahead of you. Walls and trees block that view. A bush hides you until you loose an arrow.'
 
     this.input = document.createElement('input')
     this.input.type = 'text'

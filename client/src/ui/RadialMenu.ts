@@ -1,13 +1,13 @@
-import type { WeaponAction } from '@bounty/shared'
-
 const MENU_SIZE = 280
 const OUTER_RADIUS = 108
 const INNER_RADIUS = 42
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
 export interface RadialOption {
-  id: WeaponAction
+  id: string
   label: string
+  action: 'drop' | 'pickup'
+  weaponId: string | null
 }
 
 export class RadialMenu {
@@ -16,7 +16,7 @@ export class RadialMenu {
   private readonly caption: HTMLParagraphElement
   private options: RadialOption[] = []
   private optionKey = ''
-  private highlight: WeaponAction | null = null
+  private highlight: string | null = null
 
   constructor(parent: HTMLElement) {
     this.root = document.createElement('div')
@@ -63,7 +63,7 @@ export class RadialMenu {
     const dy = clientY - (rect.top + rect.height / 2)
     if (Math.hypot(dx, dy) < INNER_RADIUS) {
       this.highlight = null
-      this.setCaption('Cancel', false)
+      this.setCaption('', false)
       this.paintHighlight()
       return
     }
@@ -71,15 +71,17 @@ export class RadialMenu {
     let angle = Math.atan2(dx, -dy)
     if (angle < 0) angle += Math.PI * 2
     const sector = (Math.PI * 2) / this.options.length
-    const index = Math.min(this.options.length - 1, Math.floor(angle / sector))
+    const shifted = angle + sector / 2
+    const wrapped = shifted >= Math.PI * 2 ? shifted - Math.PI * 2 : shifted
+    const index = Math.min(this.options.length - 1, Math.floor(wrapped / sector))
     const option = this.options[index]
     this.highlight = option?.id ?? null
-    this.setCaption(option?.label ?? '', option !== undefined)
+    this.setCaption('', false)
     this.paintHighlight()
   }
 
-  selected(): WeaponAction | null {
-    return this.highlight
+  selected(): RadialOption | null {
+    return this.options.find((option) => option.id === this.highlight) ?? null
   }
 
   dispose(): void {
@@ -112,7 +114,7 @@ export class RadialMenu {
     for (let index = 0; index < this.options.length; index += 1) {
       const option = this.options[index]
       if (!option) continue
-      const start = index * sector
+      const start = index * sector - sector / 2
       this.addSector(option, start, start + sector)
       this.addLabel(option, start + sector / 2)
     }
@@ -123,7 +125,7 @@ export class RadialMenu {
     const path = document.createElementNS(SVG_NS, 'path')
     path.setAttribute('class', 'radial-sector')
     path.setAttribute('d', donutPath(MENU_SIZE / 2, MENU_SIZE / 2, INNER_RADIUS, OUTER_RADIUS))
-    if (option) path.dataset.action = option.id
+    if (option) path.dataset.option = option.id
     this.svg.append(path)
   }
 
@@ -143,7 +145,7 @@ export class RadialMenu {
       'd',
       sectorPath(MENU_SIZE / 2, MENU_SIZE / 2, INNER_RADIUS, OUTER_RADIUS, start, end),
     )
-    if (option) path.dataset.action = option.id
+    if (option) path.dataset.option = option.id
     this.svg.append(path)
   }
 
@@ -154,7 +156,7 @@ export class RadialMenu {
     text.setAttribute('class', 'radial-label')
     text.setAttribute('x', String(point.x))
     text.setAttribute('y', String(point.y))
-    text.dataset.action = option.id
+    text.dataset.option = option.id
     text.textContent = option.label
     this.svg.append(text)
   }
@@ -162,12 +164,12 @@ export class RadialMenu {
   private paintHighlight(): void {
     const sectors = this.svg.querySelectorAll('path')
     for (const sector of sectors) {
-      const selected = this.highlight !== null && sector.dataset.action === this.highlight
+      const selected = this.highlight !== null && sector.dataset.option === this.highlight
       sector.classList.toggle('is-selected', selected)
     }
     const labels = this.svg.querySelectorAll('text')
     for (const label of labels) {
-      const selected = this.highlight !== null && label.dataset.action === this.highlight
+      const selected = this.highlight !== null && label.dataset.option === this.highlight
       label.classList.toggle('is-selected', selected)
     }
   }

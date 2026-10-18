@@ -234,8 +234,9 @@ function bowTip(kind: WeaponKind | null): string {
     info.name,
     info.detail,
     `${spec.damage} damage`,
+    Number.isFinite(spec.power) ? `Power ${compact(spec.power)}` : 'Infinite power',
     `${compact(spec.speed)} speed`,
-    `${compact(spec.maxRange)} range`,
+    Number.isFinite(spec.maxRange) ? `${compact(spec.maxRange)} range` : 'Reaches any spot',
     `${(spec.fireCooldownMs / 1000).toFixed(2)}s between shots`,
     'Normal arrows never run out.',
   ].join('\n')
@@ -249,7 +250,7 @@ function arrowTip(kind: ArrowKind, count: number, weapon: WeaponKind | null): st
     lines.push(
       `${spec.damage} damage`,
       `${compact(spec.speed)} speed`,
-      `${compact(spec.maxRange)} range`,
+      Number.isFinite(spec.maxRange) ? `${compact(spec.maxRange)} range` : 'Reaches any spot',
     )
   } else {
     lines.push('Pick up a bow to shoot them.')

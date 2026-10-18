@@ -89,7 +89,7 @@ wss.on('connection', (socket) => {
 
     if (playerId === null) return
     if (message.type === 'action') {
-      game.applyAction(playerId, message.action)
+      game.applyAction(playerId, message)
       return
     }
     game.setInput(playerId, message)

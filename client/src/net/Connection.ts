@@ -61,8 +61,8 @@ export class Connection {
     this.send({ type: 'input', ...input })
   }
 
-  sendAction(action: WeaponAction): void {
-    const message: ActionMessage = { type: 'action', action }
+  sendAction(action: WeaponAction, weaponId: string | null): void {
+    const message: ActionMessage = { type: 'action', action, weaponId }
     this.send(message)
   }
 

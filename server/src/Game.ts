@@ -1,5 +1,6 @@
 import {
   ARROW_GRAVITY,
+  timeToGround,
   ARROW_KINDS,
   ARROW_REST_MS,
   ARROW_STACK_SIZE,
@@ -31,13 +32,12 @@ import {
   type ArrowStackSnapshot,
   type DummySnapshot,
   type ExplosionSnapshot,
+  type ActionMessage,
   type InputMessage,
   type StateMessage,
-  type WeaponAction,
   type WeaponKind,
   type WeaponSnapshot,
 } from '@bounty/shared'
-import { timeToGround } from './ballistics'
 import { ArrowStack } from './ArrowStack'
 import { Dummy } from './Dummy'
 import { Explosion } from './Explosion'
@@ -104,11 +104,11 @@ export class Game {
     this.players.get(id)?.setInput(input)
   }
 
-  applyAction(id: string, action: WeaponAction): void {
+  applyAction(id: string, action: ActionMessage): void {
     const player = this.players.get(id)
     if (!player) return
-    if (action === 'drop') this.dropWeapon(player)
-    else this.pickupWeapon(player)
+    if (action.action === 'drop') this.dropWeapon(player)
+    else if (action.weaponId) this.pickupWeapon(player, action.weaponId)
   }
 
   tick(): void {
@@ -293,21 +293,14 @@ export class Game {
     if (weapon) this.groundWeapons.push(weapon)
   }
 
-  private pickupWeapon(player: Player): void {
-    if (!player.alive || player.weapon) return
+  private pickupWeapon(player: Player, weaponId: string): void {
+    if (!player.alive) return
+    const chosen = this.groundWeapons.find((weapon) => weapon.id === weaponId)
+    if (!chosen) return
+    if (Math.hypot(chosen.x - player.x, chosen.z - player.z) > PICKUP_RADIUS) return
 
-    let nearest: Weapon | null = null
-    let nearestDistance = PICKUP_RADIUS
-    for (const weapon of this.groundWeapons) {
-      const distance = Math.hypot(weapon.x - player.x, weapon.z - player.z)
-      if (distance > nearestDistance) continue
-      nearest = weapon
-      nearestDistance = distance
-    }
-    if (!nearest) return
-
-    const chosen = nearest
     this.groundWeapons = this.groundWeapons.filter((weapon) => weapon !== chosen)
+    if (player.weapon) this.dropWeapon(player)
     player.hold(chosen)
   }
 

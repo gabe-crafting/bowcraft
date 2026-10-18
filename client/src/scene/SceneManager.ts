@@ -1,5 +1,12 @@
 import {
   AMBIENT_COLOR,
+  arrowShot,
+  BOW_NAMES,
+  BOWS,
+  DUMMY_RADIUS,
+  HUNTER_HIT_HEIGHT,
+  PLAYER_RADIUS,
+  previewPath,
   AMBIENT_INTENSITY,
   CAMERA_DISTANCE,
   CAMERA_FAR,
@@ -38,6 +45,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three'
+import { AimLine } from '../entities/AimLine'
 import { ArrowStackView } from '../entities/ArrowStackView'
 import { DummyView } from '../entities/DummyView'
 import { ExplosionView } from '../entities/ExplosionView'
@@ -72,6 +80,7 @@ export class SceneManager {
   private readonly scene = new Scene()
   /** The local hunter's own arrows and blasts, drawn after the fog. */
   private readonly revealed = new Scene()
+  private readonly aimLine = new AimLine()
   private readonly camera: PerspectiveCamera
   private readonly renderer: WebGLRenderer
   private readonly arena = new Arena()
@@ -107,6 +116,7 @@ export class SceneManager {
     this.hud.onSelect((slot) => this.input.select(slot))
 
     this.scene.background = new Color(SKY_COLOR)
+    this.revealed.add(this.aimLine.group)
     this.scene.add(this.arena.group)
     this.scene.add(this.scenery.group)
     this.scene.add(new AmbientLight(AMBIENT_COLOR, AMBIENT_INTENSITY))
@@ -148,6 +158,7 @@ export class SceneManager {
     this.stackViews.clear()
     this.dummyViews.clear()
     this.explosionViews.clear()
+    this.aimLine.dispose()
     this.radial.dispose()
     this.fog.dispose()
     this.scenery.dispose()
@@ -186,8 +197,10 @@ export class SceneManager {
         const flares = sample.projectiles.filter((projectile) => projectile.arrow === 'flare')
         this.fog.follow(local.x, local.z, aim.aim, this.camera, flares)
         this.connection.sendInput(this.input.consume(aim.aim, aim.x, aim.z))
+        this.updateAimLine(local, sample.players, sample.dummies, sample.weapons, aim)
         this.updateWeaponMenu(local, sample.weapons)
       } else {
+        this.aimLine.setPath([])
         this.radial.setOpen(false)
       }
       this.updateHud(sample.players, sample.weapons)
@@ -340,6 +353,41 @@ export class SceneManager {
     this.dropMissing(this.explosionViews, seen)
   }
 
+  private updateAimLine(
+    local: PlayerSnapshot,
+    players: readonly PlayerSnapshot[],
+    dummies: readonly DummySnapshot[],
+    weapons: readonly WeaponSnapshot[],
+    aim: { aim: number; x: number; z: number },
+  ): void {
+    const kind = bowKind(local.weaponId, weapons)
+    if (!local.alive || !kind) {
+      this.aimLine.setPath([])
+      return
+    }
+    const spec = arrowShot(BOWS[kind], local.selected)
+    const blockers = []
+    for (const player of players) {
+      if (!player.alive || player.id === local.id) continue
+      blockers.push({
+        x: player.x,
+        z: player.z,
+        radius: PLAYER_RADIUS + spec.radius,
+        height: HUNTER_HIT_HEIGHT,
+      })
+    }
+    for (const dummy of dummies) {
+      if (!dummy.alive) continue
+      blockers.push({
+        x: dummy.x,
+        z: dummy.z,
+        radius: DUMMY_RADIUS + spec.radius,
+        height: HUNTER_HIT_HEIGHT,
+      })
+    }
+    this.aimLine.setPath(previewPath(spec, local.x, local.z, aim.aim, aim.x, aim.z, blockers))
+  }
+
   private updateWeaponMenu(local: PlayerSnapshot, weapons: readonly WeaponSnapshot[]): void {
     const menu = this.input.pullMenu()
     const show = local.alive && (menu.held || menu.released)
@@ -348,7 +396,7 @@ export class SceneManager {
     this.radial.pointAt(this.input.pointer.x, this.input.pointer.y)
     const action = menu.released ? this.radial.selected() : null
     this.radial.setOpen(menu.held && local.alive)
-    if (action) this.connection.sendAction(action)
+    if (action) this.connection.sendAction(action.action, action.weaponId)
   }
 
   private dropMissing<T extends { dispose: () => void }>(
@@ -410,14 +458,20 @@ function shotJustLeft(
 
 function weaponOptions(local: PlayerSnapshot, weapons: readonly WeaponSnapshot[]): RadialOption[] {
   if (!local.alive) return []
-  if (local.weaponId) return [{ id: 'drop', label: 'Drop' }]
   const reach = PICKUP_RADIUS * PICKUP_RADIUS
-  const nearby = weapons.some((weapon) => {
-    if (weapon.heldBy !== null) return false
+  const options: RadialOption[] = []
+  for (const weapon of weapons) {
+    if (weapon.heldBy !== null) continue
     const dx = weapon.x - local.x
     const dz = weapon.z - local.z
-    return dx * dx + dz * dz <= reach
-  })
-  if (nearby) return [{ id: 'pickup', label: 'Pick up' }]
-  return []
+    if (dx * dx + dz * dz > reach) continue
+    options.push({
+      id: weapon.id,
+      label: BOW_NAMES[weapon.kind].name,
+      action: 'pickup',
+      weaponId: weapon.id,
+    })
+  }
+  if (local.weaponId) options.push({ id: 'drop', label: 'Drop', action: 'drop', weaponId: null })
+  return options
 }

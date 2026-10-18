@@ -41,26 +41,28 @@ export const HUNTER_HIT_HEIGHT = 1.7
 export const COVER_PASS_HEIGHT = 1.35
 export const TREE_TRUNK_HEIGHT = 1.15
 
-/** Heavy draw. Lobs onto the clicked ground. */
+/** Seconds a level arrow stays aloft before it meets the ground. */
+export const ARROW_FALL_SECONDS = Math.sqrt((2 * PROJECTILE_Y) / ARROW_GRAVITY)
+/** Shared travel modifiers, so bow power is what changes the shot for now. */
+export const ARROW_SPEED_MODIFIER = 1
+export const ARROW_RANGE_MODIFIER = 1
+
+/** Lofts. Power does not set its speed, and it can reach any point on the map. */
 export const LONGBOW_DAMAGE = 45
 export const LONGBOW_SPEED = 36
-export const LONGBOW_RANGE = 42
 export const LONGBOW_COOLDOWN_MS = 720
 /** Extra hang time so a longbow rises before it falls. */
 export const LONGBOW_LOFT = 0.85
 
-/** Light draw. Flies straight along the hunter's facing and drops early. */
+/** Forward power. Higher power is faster and lands farther. */
+export const SHORTBOW_POWER = 30
 export const SHORTBOW_DAMAGE = 22
-export const SHORTBOW_SPEED = 30
-export const SHORTBOW_RANGE = 24
 export const SHORTBOW_COOLDOWN_MS = 320
 
-/** Curved shot. Longer reach, slower to loose, and one hook around cover. */
+/** More power than a shortbow, so the shot is faster and lands farther. */
+export const RECURVE_POWER = 48
 export const RECURVE_DAMAGE = 36
-export const RECURVE_SPEED = 34
-export const RECURVE_RANGE = 56
 export const RECURVE_COOLDOWN_MS = 1100
-export const RECURVE_LOFT = 0.55
 export const EXPLOSION_RADIUS = 2.5
 /** How long the blast stays on screen. */
 export const EXPLOSION_ANIM_MS = 640
@@ -70,9 +72,6 @@ export const DUMMY_RADIUS = 0.34
 export const PICKUP_RADIUS = 1.6
 /** Arrows in one pile on the ground. */
 export const ARROW_STACK_SIZE = 4
-/** Flare arrows crawl so a hunter can follow them through the fog. */
-export const FLARE_SPEED_SCALE = 0.22
-export const FLARE_RANGE_SCALE = 0.8
 export const FLARE_DAMAGE_SCALE = 0.3
 /** Clear circle around a flying flare. It fades across FLARE_LIGHT_FALLOFF. */
 export const FLARE_LIGHT_RADIUS = 7

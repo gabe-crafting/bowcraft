@@ -137,6 +137,7 @@ classDiagram
     +number bornMs
   }
   class ProjectileSpec {
+    +number power
     +number speed
     +number maxRange
     +number damage
@@ -159,7 +160,7 @@ classDiagram
   Projectile --> ProjectileSpec
 ```
 
-Held weapons stay on the player. `groundWeapons` is only the ones lying in the arena. `arrowStacks` are piles of ricochet, explosion, bodkin, and flare arrows. Walking over a pile adds them to `quiver`. `selected` is `normal` for the unlimited arrow, or one of those four. Ricochet arrows bounce off walls, trunks, and the arena edge. Explosion arrows burst on the ground, on those surfaces, on hunters, and on dummies, and leave a short `Explosion`. The shooter keeps seeing that arrow and its blast after they leave the view cone. Bodkin arrows pass through walls and trunks. Flare arrows fly slowly and light a full circle, blocked by walls and trunks, until they land. `Dummy` targets stand along the walls and across the arena. They take arrow and blast damage and stay fallen at 0 hp. `Weapon` creates each `Projectile` from the bow and the selected arrow. A shortbow flies flat along the facing and drops. A longbow lofts onto the clicked ground and can pass over low cover. A recurve does the same with a longer reach, and bends once to get around a wall. The bow still sets the time between shots.
+Held weapons stay on the player. `groundWeapons` is only the ones lying in the arena. `arrowStacks` are piles of ricochet, explosion, bodkin, and flare arrows. Walking over a pile adds them to `quiver`. `selected` is `normal` for the unlimited arrow, or one of those four. Ricochet arrows bounce off walls, trunks, and the arena edge. Explosion arrows burst on the ground, on those surfaces, on hunters, and on dummies, and leave a short `Explosion`. The shooter keeps seeing that arrow and its blast after they leave the view cone. Bodkin arrows pass through walls and trunks. Flare arrows light a full circle, blocked by walls and trunks, until they land. Hold E to open the weapon ring. It lists each nearby bow and, if one is already in hand, Drop. Choosing another bow drops the current one. `Dummy` targets stand along the walls and across the arena. They take arrow and blast damage and stay fallen at 0 hp. `Weapon` creates each `Projectile` from the bow and the selected arrow. A bow's `power` sets the speed and distance of a forward shot. A longbow's power is infinite, so it can reach any point, and that power does not change its speed because the arrow is lofted. A shortbow and a recurve shoot ahead and drop. The recurve hooks once around a wall. Arrow `speedScale` and `rangeScale` can slow, quicken, shorten, or lengthen a shot. Every arrow currently uses the same modifier. While a bow is in hand, a thin line shows the path that loose would take and where it would land. The bow still sets the time between shots.
 
 ## Client
 
@@ -186,6 +187,8 @@ classDiagram
     -Map~string, ArrowStackView~ stackViews
     -Map~string, DummyView~ dummyViews
     -Map~string, ExplosionView~ explosionViews
+    -Scene revealed
+    -AimLine aimLine
     -RadialMenu radial
     -Fog fog
     -Raycaster raycaster
@@ -228,6 +231,9 @@ classDiagram
     -string nockKind
     -number shotStarted
   }
+  class AimLine {
+    +Group group
+  }
   class ProjectileView {
     +Group group
   }
@@ -262,7 +268,7 @@ classDiagram
     -HTMLParagraphElement caption
     -RadialOption[] options
     -string optionKey
-    -WeaponAction highlight
+    -string highlight
   }
   class Connection {
     -WebSocket socket
@@ -331,7 +337,7 @@ classDiagram
 
 ## Messages
 
-Interfaces, not classes. `Player` stores `InputMessage`. `Connection` and `SnapshotBuffer` carry `StateMessage`. `Hud` draws `Nameplate` and the five hotbar squares. `RadialOption` is the menu entry `{ id, label }`. `WallBlock`, `TreeSpot`, and `BushSpot` are the static map. Walls and tree trunks block hunters, arrows, and sight. Bushes do not. A hunter inside a bush is hidden from everyone else until they loose an arrow, which reveals them for two seconds. `PlayerSnapshot.hidden` is that state for the hunter's own client. Sight is a cone in front of the hunter. `InputMessage.slot` asks for the bow (`0`) or a quiver slot (`1` to `4`). `selected` is the arrow that will be shot. `quiver` counts ricochet, explosion, bodkin, and flare. Normal arrows are unlimited. `cooldownMs` is the wait left on the bow. A flying flare reveals hunters, arrows, bows, stacks, and dummies inside its circle, even outside the view cone. `DummySnapshot` is a straw target. `ExplosionSnapshot.ageMs` drives the blast animation.
+Interfaces, not classes. `Player` stores `InputMessage`. `Connection` and `SnapshotBuffer` carry `StateMessage`. `Hud` draws `Nameplate` and the five hotbar squares. `RadialOption` is one ring slice: a nearby bow to pick up, or Drop. `WallBlock`, `TreeSpot`, and `BushSpot` are the static map. Walls and tree trunks block hunters, arrows, and sight. Bushes do not. A hunter inside a bush is hidden from everyone else until they loose an arrow, which reveals them for two seconds. `PlayerSnapshot.hidden` is that state for the hunter's own client. Sight is a cone in front of the hunter. `InputMessage.slot` asks for the bow (`0`) or a quiver slot (`1` to `4`). `selected` is the arrow that will be shot. `quiver` counts ricochet, explosion, bodkin, and flare. Normal arrows are unlimited. `cooldownMs` is the wait left on the bow. A flying flare reveals hunters, arrows, bows, stacks, and dummies inside its circle, even outside the view cone. `DummySnapshot` is a straw target. `ExplosionSnapshot.ageMs` drives the blast animation.
 
 ```mermaid
 classDiagram
@@ -351,6 +357,7 @@ classDiagram
   class ActionMessage {
     +string type
     +string action
+    +string weaponId
   }
   class JoinMessage {
     +string type

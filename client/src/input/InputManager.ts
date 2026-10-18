@@ -89,7 +89,7 @@ export class InputManager {
       this.slot = slot
       return
     }
-    if (event.code === 'KeyM') {
+    if (event.code === 'KeyE') {
       if (event.repeat || this.menuDown) return
       this.menuDown = true
       return
@@ -99,7 +99,7 @@ export class InputManager {
   }
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
-    if (event.code === 'KeyM') {
+    if (event.code === 'KeyE') {
       if (!this.menuDown) return
       this.menuDown = false
       this.menuReleaseLatched = true

@@ -1,10 +1,4 @@
-import {
-  EXPLOSION_RADIUS,
-  FLARE_DAMAGE_SCALE,
-  FLARE_RANGE_SCALE,
-  FLARE_SPEED_SCALE,
-  PROJECTILE_COLOR,
-} from './constants'
+import { ARROW_RANGE_MODIFIER, ARROW_SPEED_MODIFIER, EXPLOSION_RADIUS, FLARE_DAMAGE_SCALE, PROJECTILE_COLOR } from './constants'
 import type { ProjectileSpec } from './weapon'
 
 /** Picked up from the ground. Slot order is the 1, 2, 3, and 4 keys. */
@@ -29,7 +23,9 @@ export interface ArrowProfile extends ArrowLook {
   readonly name: string
   readonly detail: string
   readonly damageScale: number
+  /** Multiplies bow speed. The same value on every arrow for now. */
   readonly speedScale: number
+  /** Multiplies how far a forward bow carries the arrow. The same value on every arrow for now. */
   readonly rangeScale: number
   readonly explodes: boolean
   readonly penetrates: boolean
@@ -49,8 +45,8 @@ export const ARROWS: Record<ArrowKind, ArrowProfile> = {
     name: 'Ricochet',
     detail: 'Glances off walls, trees, and the arena edge.',
     damageScale: 0.9,
-    speedScale: 1,
-    rangeScale: 1.1,
+    speedScale: ARROW_SPEED_MODIFIER,
+    rangeScale: ARROW_RANGE_MODIFIER,
     explodes: false,
     penetrates: false,
     ricochets: true,
@@ -62,8 +58,8 @@ export const ARROWS: Record<ArrowKind, ArrowProfile> = {
     name: 'Explosion arrow',
     detail: 'Bursts on the ground, walls, trees, and hunters.',
     damageScale: 0.7,
-    speedScale: 0.95,
-    rangeScale: 0.9,
+    speedScale: ARROW_SPEED_MODIFIER,
+    rangeScale: ARROW_RANGE_MODIFIER,
     explodes: true,
     penetrates: false,
     ricochets: false,
@@ -75,8 +71,8 @@ export const ARROWS: Record<ArrowKind, ArrowProfile> = {
     name: 'Bodkin',
     detail: 'A narrow point that punches through walls and trees.',
     damageScale: 0.8,
-    speedScale: 1.12,
-    rangeScale: 1.05,
+    speedScale: ARROW_SPEED_MODIFIER,
+    rangeScale: ARROW_RANGE_MODIFIER,
     explodes: false,
     penetrates: true,
     ricochets: false,
@@ -86,10 +82,10 @@ export const ARROWS: Record<ArrowKind, ArrowProfile> = {
   },
   flare: {
     name: 'Flare',
-    detail: 'Crawls through the air and lights a full circle until it lands.',
+    detail: 'Lights a full circle until it lands.',
     damageScale: FLARE_DAMAGE_SCALE,
-    speedScale: FLARE_SPEED_SCALE,
-    rangeScale: FLARE_RANGE_SCALE,
+    speedScale: ARROW_SPEED_MODIFIER,
+    rangeScale: ARROW_RANGE_MODIFIER,
     explodes: false,
     penetrates: false,
     ricochets: false,
@@ -117,6 +113,7 @@ export function arrowShot(bow: ProjectileSpec, arrow: ShotArrow): ProjectileSpec
   if (arrow === 'normal') return bow
   const profile = ARROWS[arrow]
   return {
+    power: bow.power,
     speed: bow.speed * profile.speedScale,
     maxRange: bow.maxRange * profile.rangeScale,
     damage: Math.round(bow.damage * profile.damageScale),
