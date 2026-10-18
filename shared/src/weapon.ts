@@ -19,7 +19,7 @@ import {
  * `penetrates` lets the arrow pass walls and trunks; it still stops at max range and on players.
  * `ricochets` bounces off walls, trunks, and the arena edge.
  * `power` sets speed and distance for a forward bow. A longbow's power is infinite and does not set its speed.
- * `flat` flies along the facing and drops. `lob` drops on the click. `hook` bends once around cover, still along the facing.
+ * `flat` flies along the facing and drops. `lob` drops on the click. `hook` aims at the click and bends once around the first wall or trunk on that line.
  */
 export type Trajectory = 'flat' | 'lob' | 'hook'
 
@@ -51,7 +51,7 @@ export const BOW_NAMES: Record<WeaponKind, { readonly name: string; readonly det
   },
   recurve: {
     name: 'Recurve',
-    detail: 'Shoots ahead with more power, so it flies faster and farther, and hooks once around a wall.',
+    detail: 'Aims at the click. Bends once around a wall or tree when that line is blocked.',
   },
 }
 

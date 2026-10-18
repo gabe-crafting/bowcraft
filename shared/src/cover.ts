@@ -1,5 +1,5 @@
 import { ARENA_SIZE, TREE_TRUNK_RADIUS } from './constants'
-import { TREES, WALLS, wallBounds } from './map'
+import { TREES, WALLS, wallBounds, type WallBlock } from './map'
 
 export interface CoverHit {
   t: number
@@ -14,6 +14,33 @@ export function arenaLimit(entityRadius: number): number {
 export function isInsideArena(x: number, z: number, radius: number): boolean {
   const limit = arenaLimit(radius)
   return Math.abs(x) <= limit && Math.abs(z) <= limit
+}
+
+export type BlockingCover =
+  | { kind: 'wall'; wall: WallBlock; t: number; nx: number; nz: number }
+  | { kind: 'tree'; x: number; z: number; t: number; nx: number; nz: number }
+
+/** The first wall or trunk a segment meets, so a hook knows what it may bend around. */
+export function firstObstacle(
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  radius: number,
+): BlockingCover | null {
+  let closest: BlockingCover | null = null
+  for (const wall of WALLS) {
+    const bounds = wallBounds(wall, radius)
+    const hit = segmentAabbHit(x0, z0, x1, z1, bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ)
+    if (!hit || (closest && hit.t >= closest.t)) continue
+    closest = { kind: 'wall', wall, t: hit.t, nx: hit.nx, nz: hit.nz }
+  }
+  for (const tree of TREES) {
+    const hit = circleEntry(x0, z0, x1, z1, tree.x, tree.z, TREE_TRUNK_RADIUS + radius)
+    if (!hit || (closest && hit.t >= closest.t)) continue
+    closest = { kind: 'tree', x: tree.x, z: tree.z, t: hit.t, nx: hit.nx, nz: hit.nz }
+  }
+  return closest
 }
 
 /** Earliest 0..1 hit against a wall or trunk, with the outward normal. */

@@ -46,6 +46,7 @@ export class Weapon {
       launch.landZ,
       launch.bendX,
       launch.bendZ,
+      launch.curve,
       spec,
       arrow,
     )

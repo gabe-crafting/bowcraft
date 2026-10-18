@@ -48,7 +48,12 @@ export {
   PLAYER_ID_MAX_LENGTH,
   PLAYER_RADIUS,
   RECURVE_COOLDOWN_MS,
+  RECURVE_CORNER_PUSH,
+  RECURVE_CURVE_MIN_RADIUS,
+  RECURVE_CURVE_RADIUS,
+  RECURVE_CURVE_STEP,
   RECURVE_DAMAGE,
+  RECURVE_GATE_GAP,
   RECURVE_POWER,
   PLAYER_SPEED,
   PROJECTILE_COLOR,
@@ -100,10 +105,12 @@ export {
 } from './map'
 export { isInLight, isInSight } from './vision'
 export {
+  curveAdvance,
   planLaunch,
   previewPath,
   timeToGround,
   type FlightBlocker,
+  type FlightCurve,
   type FlightPoint,
   type Launch,
 } from './ballistics'

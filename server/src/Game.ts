@@ -1,5 +1,7 @@
 import {
   ARROW_GRAVITY,
+  curveAdvance,
+  RECURVE_CURVE_STEP,
   timeToGround,
   ARROW_KINDS,
   ARROW_REST_MS,
@@ -468,6 +470,34 @@ export class Game {
     for (let bounce = 0; bounce < 5 && remaining > 1e-4; bounce += 1) {
       const ground = timeToGround(projectile.y, projectile.vy)
       const step = ground < remaining ? ground : remaining
+      if (projectile.curve && projectile.bendX === null && !projectile.turned) {
+        const speed = Math.hypot(projectile.vx, projectile.vz) || projectile.spec.speed
+        const arcLeft = Math.abs(projectile.curve.sweep - projectile.curveAngle) * projectile.curve.radius
+        const arcTime = speed > 1e-5 ? arcLeft / speed : Number.POSITIVE_INFINITY
+        const curveDt = Math.min(step, arcTime, RECURVE_CURVE_STEP / speed)
+        if (curveDt < 1e-5) {
+          this.finishCurve(projectile, speed)
+          continue
+        }
+        const next = curveAdvance(projectile.curve, projectile.curveAngle, speed, curveDt)
+        projectile.vx = (next.x - projectile.x) / curveDt
+        projectile.vz = (next.z - projectile.z) / curveDt
+        const curved = this.integrate(projectile, curveDt)
+        if (curved.kind === 'stopped') return false
+        if (curved.kind === 'bounced') {
+          remaining -= curved.used
+          continue
+        }
+        if (projectile.grounded) return true
+        projectile.curveAngle = next.angle
+        if (next.done) this.finishCurve(projectile, speed)
+        else {
+          projectile.vx = next.tx * speed
+          projectile.vz = next.tz * speed
+        }
+        remaining -= curved.used
+        continue
+      }
       const bendX = projectile.bendX
       const bendZ = projectile.bendZ
       if (bendX !== null && bendZ !== null && !projectile.turned) {
@@ -482,7 +512,8 @@ export class Game {
             continue
           }
           if (projectile.grounded) return true
-          this.redirect(projectile)
+          if (projectile.curve) this.beginCurve(projectile)
+          else this.redirect(projectile)
           remaining -= bent.used
           continue
         }
@@ -512,16 +543,42 @@ export class Game {
     projectile.groundedAt = projectile.age
   }
 
+  /** Leaves the straight leg and takes the tangent of the circle. */
+  private beginCurve(projectile: Projectile): void {
+    projectile.bendX = null
+    projectile.bendZ = null
+    const speed = Math.hypot(projectile.vx, projectile.vz) || projectile.spec.speed
+    if (!projectile.curve) {
+      this.redirect(projectile)
+      return
+    }
+    const pose = curveAdvance(projectile.curve, 0, speed, 0)
+    projectile.curveAngle = 0
+    projectile.vx = pose.tx * speed
+    projectile.vz = pose.tz * speed
+  }
+
+  /** Leaves the circle and holds the heading toward the landing spot. */
+  private finishCurve(projectile: Projectile, speed: number): void {
+    projectile.curve = null
+    projectile.turned = true
+    const dx = projectile.landX - projectile.x
+    const dz = projectile.landZ - projectile.z
+    const distance = Math.hypot(dx, dz)
+    projectile.vx = distance > 1e-4 ? (dx / distance) * speed : projectile.vx
+    projectile.vz = distance > 1e-4 ? (dz / distance) * speed : projectile.vz
+  }
+
   /** Points the rest of a hooked shot at the landing spot. Happens once. */
   private redirect(projectile: Projectile): void {
     projectile.turned = true
     projectile.bendX = null
     projectile.bendZ = null
+    projectile.curve = null
+    const speed = Math.hypot(projectile.vx, projectile.vz) || projectile.spec.speed
     const dx = projectile.landX - projectile.x
     const dz = projectile.landZ - projectile.z
     const distance = Math.hypot(dx, dz)
-    const left = Math.max(timeToGround(projectile.y, projectile.vy), 1e-3)
-    const speed = distance / left
     projectile.vx = distance > 1e-6 ? (dx / distance) * speed : 0
     projectile.vz = distance > 1e-6 ? (dz / distance) * speed : 0
   }
@@ -619,6 +676,7 @@ export class Game {
       projectile.z = hitZ + normalZ * 0.04
       projectile.bendX = null
       projectile.bendZ = null
+      projectile.curve = null
       projectile.turned = true
       return { kind: 'bounced', used }
     }

@@ -63,6 +63,16 @@ export const SHORTBOW_COOLDOWN_MS = 320
 export const RECURVE_POWER = 48
 export const RECURVE_DAMAGE = 36
 export const RECURVE_COOLDOWN_MS = 1100
+/** Radius of the one circular bend around a wall or trunk. */
+export const RECURVE_CURVE_RADIUS = 1
+/** Smallest bend before the shot turns sharply at the gate instead. */
+export const RECURVE_CURVE_MIN_RADIUS = 0.15
+/** How far a gate sits outside the arrow's body. */
+export const RECURVE_GATE_GAP = 0.4
+/** Extra push so a wall corner is not on the stone. */
+export const RECURVE_CORNER_PUSH = 0.25
+/** Longest straight piece while following the bend, so the chord stays on the circle. */
+export const RECURVE_CURVE_STEP = 0.16
 export const EXPLOSION_RADIUS = 2.5
 /** How long the blast stays on screen. */
 export const EXPLOSION_ANIM_MS = 640

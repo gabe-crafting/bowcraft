@@ -1,6 +1,29 @@
-import { ARROW_GRAVITY, COVER_PASS_HEIGHT, LONGBOW_LOFT, PLAYER_RADIUS, PROJECTILE_SPAWN_CLEARANCE, PROJECTILE_Y } from './constants'
-import { arenaBorderHit, circleEntry, coverHit, isInsideArena } from './cover'
+import {
+  ARROW_GRAVITY,
+  COVER_PASS_HEIGHT,
+  LONGBOW_LOFT,
+  PLAYER_RADIUS,
+  PROJECTILE_SPAWN_CLEARANCE,
+  PROJECTILE_Y,
+  RECURVE_CORNER_PUSH,
+  RECURVE_CURVE_MIN_RADIUS,
+  RECURVE_CURVE_RADIUS,
+  RECURVE_CURVE_STEP,
+  RECURVE_GATE_GAP,
+  TREE_TRUNK_RADIUS,
+} from './constants'
+import { arenaBorderHit, circleEntry, coverHit, firstObstacle, isInsideArena, type BlockingCover } from './cover'
+import { wallBounds, type WallBlock } from './map'
 import type { ProjectileSpec } from './weapon'
+
+/** One circular bend. `entry` is the angle of the first tangent point, `sweep` carries it to the second. */
+export interface FlightCurve {
+  cx: number
+  cz: number
+  radius: number
+  sweep: number
+  entry: number
+}
 
 export interface Launch {
   x: number
@@ -11,8 +34,39 @@ export interface Launch {
   vz: number
   landX: number
   landZ: number
+  /** Straight flight ends here. Null when the shot never turns. */
   bendX: number | null
   bendZ: number | null
+  /** Set when the turn is a circle. Null when the shot turns sharply or not at all. */
+  curve: FlightCurve | null
+}
+
+/** Where the arrow is on its bend, and the unit tangent it should be flying. */
+export function curveAdvance(
+  curve: FlightCurve,
+  angle: number,
+  speed: number,
+  dt: number,
+): { angle: number; x: number; z: number; tx: number; tz: number; done: boolean } {
+  const remain = curve.sweep - angle
+  const sign = remain >= 0 ? 1 : -1
+  const maxStep = (speed * dt) / curve.radius
+  const nextAngle = angle + sign * Math.min(Math.abs(remain), maxStep)
+  const a = curve.entry + nextAngle
+  let tx = -Math.sin(a)
+  let tz = Math.cos(a)
+  if (curve.sweep < 0) {
+    tx = -tx
+    tz = -tz
+  }
+  return {
+    angle: nextAngle,
+    x: curve.cx + Math.cos(a) * curve.radius,
+    z: curve.cz + Math.sin(a) * curve.radius,
+    tx,
+    tz,
+    done: Math.abs(curve.sweep - nextAngle) <= 1e-4,
+  }
 }
 
 export interface FlightPoint {
@@ -45,8 +99,8 @@ export function planLaunch(
   targetZ: number,
 ): Launch {
   if (spec.trajectory === 'flat') return planFlat(originX, originZ, aim, spec)
-  if (spec.trajectory === 'hook') return planDrop(spec, originX, originZ, aim, targetX, targetZ, 0, true, true)
-  return planDrop(spec, originX, originZ, aim, targetX, targetZ, LONGBOW_LOFT, false, false)
+  if (spec.trajectory === 'hook') return planHook(spec, originX, originZ, aim, targetX, targetZ)
+  return planDrop(spec, originX, originZ, aim, targetX, targetZ, LONGBOW_LOFT, false)
 }
 
 /** Where this loose would travel, ending at the ground or the first thing it hits. */
@@ -69,6 +123,8 @@ export function previewPath(
   let vz = launch.vz
   let bendX = launch.bendX
   let bendZ = launch.bendZ
+  let curve = launch.curve
+  let curveAngle = 0
   let turned = false
   let age = 0
 
@@ -78,6 +134,69 @@ export function previewPath(
     while (remaining > 1e-4 && y > 0.02 && points.length < 180) {
       const ground = timeToGround(y, vy)
       const step = Math.min(ground > 0 ? ground : remaining, remaining, 0.05)
+      if (curve && bendX === null && !turned) {
+        const speed = Math.hypot(vx, vz) || spec.speed
+        const arcLeft = Math.abs(curve.sweep - curveAngle) * curve.radius
+        const arcTime = speed > 1e-5 ? arcLeft / speed : Number.POSITIVE_INFINITY
+        const curveDt = Math.min(step, arcTime, RECURVE_CURVE_STEP / speed)
+        if (curveDt < 1e-5) {
+          curve = null
+          turned = true
+          const dx = launch.landX - x
+          const dz = launch.landZ - z
+          const distance = Math.hypot(dx, dz)
+          vx = distance > 1e-4 ? (dx / distance) * speed : vx
+          vz = distance > 1e-4 ? (dz / distance) * speed : vz
+          continue
+        }
+        const next = curveAdvance(curve, curveAngle, speed, curveDt)
+        const moved = move(
+          spec,
+          x,
+          y,
+          z,
+          (next.x - x) / curveDt,
+          vy,
+          (next.z - z) / curveDt,
+          curveDt,
+          blockers,
+        )
+        x = moved.x
+        y = moved.y
+        z = moved.z
+        vy = moved.vy
+        age += moved.used
+        points.push({ x, y, z })
+        if (moved.kind === 'stopped') {
+          if (y <= 0.02) points[points.length - 1] = { x, y: 0, z }
+          return points
+        }
+        if (moved.kind === 'bounced') {
+          vx = moved.vx
+          vz = moved.vz
+          curve = null
+          bendX = null
+          bendZ = null
+          turned = true
+          bounced = true
+          break
+        }
+        curveAngle = next.angle
+        if (next.done) {
+          curve = null
+          turned = true
+          const dx = launch.landX - x
+          const dz = launch.landZ - z
+          const distance = Math.hypot(dx, dz)
+          vx = distance > 1e-4 ? (dx / distance) * speed : next.tx * speed
+          vz = distance > 1e-4 ? (dz / distance) * speed : next.tz * speed
+        } else {
+          vx = next.tx * speed
+          vz = next.tz * speed
+        }
+        remaining -= moved.used
+        continue
+      }
       if (bendX !== null && bendZ !== null && !turned) {
         const reach = Math.hypot(bendX - x, bendZ - z)
         const horizontal = Math.hypot(vx, vz)
@@ -96,20 +215,27 @@ export function previewPath(
             vz = moved.vz
             bendX = null
             bendZ = null
+            curve = null
             turned = true
             bounced = true
             break
           }
-          turned = true
           bendX = null
           bendZ = null
-          const dx = launch.landX - x
-          const dz = launch.landZ - z
-          const distance = Math.hypot(dx, dz)
-          const left = Math.max(timeToGround(y, vy), 1e-3)
-          const speed = distance / left
-          vx = distance > 1e-6 ? (dx / distance) * speed : 0
-          vz = distance > 1e-6 ? (dz / distance) * speed : 0
+          if (curve) {
+            const speed = Math.hypot(vx, vz) || spec.speed
+            const pose = curveAdvance(curve, 0, speed, 0)
+            vx = pose.tx * speed
+            vz = pose.tz * speed
+          } else {
+            turned = true
+            const speed = Math.hypot(vx, vz) || spec.speed
+            const dx = launch.landX - x
+            const dz = launch.landZ - z
+            const distance = Math.hypot(dx, dz)
+            vx = distance > 1e-6 ? (dx / distance) * speed : 0
+            vz = distance > 1e-6 ? (dz / distance) * speed : 0
+          }
           remaining -= moved.used
           continue
         }
@@ -130,6 +256,7 @@ export function previewPath(
         vz = moved.vz
         bendX = null
         bendZ = null
+        curve = null
         turned = true
         bounced = true
         break
@@ -163,6 +290,7 @@ function planFlat(originX: number, originZ: number, aim: number, spec: Projectil
     landZ,
     bendX: null,
     bendZ: null,
+    curve: null,
   }
 }
 
@@ -174,7 +302,6 @@ function planDrop(
   targetX: number,
   targetZ: number,
   loft: number,
-  hook: boolean,
   alongAim: boolean,
 ): Launch {
   const clearance = PLAYER_RADIUS + spec.radius + PROJECTILE_SPAWN_CLEARANCE
@@ -200,14 +327,11 @@ function planDrop(
   const z = originZ + dirZ * clearance
   const landX = originX + dx
   const landZ = originZ + dz
-  const bend = hook ? hookAround(x, z, landX, landZ, spec.radius) : null
-  const path = bend
-    ? Math.hypot(bend.x - x, bend.z - z) + Math.hypot(landX - bend.x, landZ - bend.z)
-    : Math.hypot(landX - x, landZ - z)
+  const path = Math.hypot(landX - x, landZ - z)
   const flight = loft + path / spec.speed
   const horizontal = path / flight
-  const towardX = bend ? bend.x - x : landX - x
-  const towardZ = bend ? bend.z - z : landZ - z
+  const towardX = landX - x
+  const towardZ = landZ - z
   const toward = Math.hypot(towardX, towardZ) || 1
   const vy = (0 - PROJECTILE_Y) / flight + 0.5 * ARROW_GRAVITY * flight
   return {
@@ -219,41 +343,283 @@ function planDrop(
     vz: (towardZ / toward) * horizontal,
     landX,
     landZ,
-    bendX: bend?.x ?? null,
-    bendZ: bend?.z ?? null,
+    bendX: null,
+    bendZ: null,
+    curve: null,
   }
 }
 
-/** One waypoint that lets both legs miss cover. Null when the straight line is open. */
-function hookAround(
-  fromX: number,
-  fromZ: number,
-  toX: number,
-  toZ: number,
+/** Aims at the click. Bends once when the first wall or trunk blocks that line. */
+function planHook(
+  spec: ProjectileSpec,
+  originX: number,
+  originZ: number,
+  aim: number,
+  targetX: number,
+  targetZ: number,
+): Launch {
+  const clearance = PLAYER_RADIUS + spec.radius + PROJECTILE_SPAWN_CLEARANCE
+  let dx = targetX - originX
+  let dz = targetZ - originZ
+  let distance = Math.hypot(dx, dz)
+  if (distance < 0.75) {
+    dx = Math.sin(aim)
+    dz = Math.cos(aim)
+    distance = 1
+  } else if (Number.isFinite(spec.maxRange) && distance > spec.maxRange) {
+    dx = (dx / distance) * spec.maxRange
+    dz = (dz / distance) * spec.maxRange
+    distance = spec.maxRange
+  }
+  const dirX = dx / distance
+  const dirZ = dz / distance
+  const x = originX + dirX * clearance
+  const z = originZ + dirZ * clearance
+  const aimX = originX + dx
+  const aimZ = originZ + dz
+  const budget = Number.isFinite(spec.maxRange) ? spec.maxRange : distance
+  const blocked = firstObstacle(x, z, aimX, aimZ, spec.radius)
+  const gate = blocked ? chooseGate(x, z, aimX, aimZ, blocked, spec.radius) : null
+  if (!gate) {
+    const land = pointAlong(x, z, aimX, aimZ, budget)
+    return launchStraight(spec, x, z, land.x, land.z, null, null, null, Math.hypot(land.x - x, land.z - z))
+  }
+
+  const fillet = buildFillet(x, z, gate.x, gate.z, aimX, aimZ, spec.radius)
+  if (!fillet) {
+    return launchBent(spec, x, z, gate.x, gate.z, gate.x, gate.z, aimX, aimZ, null, budget)
+  }
+  return launchBent(
+    spec,
+    x,
+    z,
+    fillet.t1x,
+    fillet.t1z,
+    fillet.t2x,
+    fillet.t2z,
+    aimX,
+    aimZ,
+    fillet.curve,
+    budget,
+  )
+}
+
+function launchStraight(
+  spec: ProjectileSpec,
+  x: number,
+  z: number,
+  landX: number,
+  landZ: number,
+  bendX: number | null,
+  bendZ: number | null,
+  curve: FlightCurve | null,
+  pathLength: number,
+): Launch {
+  const headX = bendX ?? landX
+  const headZ = bendZ ?? landZ
+  const dx = headX - x
+  const dz = headZ - z
+  const distance = Math.hypot(dx, dz) || 1
+  const flight = Math.max(pathLength, 0.05) / spec.speed
+  return {
+    x,
+    y: PROJECTILE_Y,
+    z,
+    vx: (dx / distance) * spec.speed,
+    vy: (0 - PROJECTILE_Y) / flight + 0.5 * ARROW_GRAVITY * flight,
+    vz: (dz / distance) * spec.speed,
+    landX,
+    landZ,
+    bendX,
+    bendZ,
+    curve,
+  }
+}
+
+/** Spends the path budget across the straight leg, the bend, and the leg after it. */
+function launchBent(
+  spec: ProjectileSpec,
+  x: number,
+  z: number,
+  t1x: number,
+  t1z: number,
+  t2x: number,
+  t2z: number,
+  aimX: number,
+  aimZ: number,
+  curve: FlightCurve | null,
+  budget: number,
+): Launch {
+  const leg1 = Math.hypot(t1x - x, t1z - z)
+  const arc = curve ? curve.radius * Math.abs(curve.sweep) : 0
+  const second = Math.hypot(aimX - t2x, aimZ - t2z)
+  const spent = Math.min(budget, leg1 + arc + second)
+  if (spent <= leg1) {
+    const land = pointAlong(x, z, t1x, t1z, spent)
+    return launchStraight(spec, x, z, land.x, land.z, null, null, null, spent)
+  }
+  if (curve && spent <= leg1 + arc) {
+    const along = (spent - leg1) / curve.radius
+    const sweep = curve.sweep >= 0 ? along : -along
+    const shortened: FlightCurve = { ...curve, sweep }
+    const end = curveAdvance(shortened, 0, 1, along * shortened.radius)
+    return launchStraight(spec, x, z, end.x, end.z, t1x, t1z, shortened, spent)
+  }
+  const land = pointAlong(t2x, t2z, aimX, aimZ, spent - leg1 - arc)
+  return launchStraight(spec, x, z, land.x, land.z, t1x, t1z, curve, spent)
+}
+
+function pointAlong(x0: number, z0: number, x1: number, z1: number, distance: number): { x: number; z: number } {
+  const dx = x1 - x0
+  const dz = z1 - z0
+  const length = Math.hypot(dx, dz)
+  if (length < 1e-6) return { x: x0, z: z0 }
+  const scale = Math.min(1, distance / length)
+  return { x: x0 + dx * scale, z: z0 + dz * scale }
+}
+
+function chooseGate(
+  spawnX: number,
+  spawnZ: number,
+  aimX: number,
+  aimZ: number,
+  obstacle: BlockingCover,
   radius: number,
 ): { x: number; z: number } | null {
-  const blocked = coverHit(fromX, fromZ, toX, toZ, radius)
-  if (!blocked) return null
-  const dx = toX - fromX
-  const dz = toZ - fromZ
-  const length = Math.hypot(dx, dz) || 1
-  const px = -dz / length
-  const pz = dx / length
-  const hitX = fromX + dx * blocked.t
-  const hitZ = fromZ + dz * blocked.t
+  const gates = obstacle.kind === 'wall' ? wallGates(obstacle.wall, radius) : treeGates(obstacle.x, obstacle.z, spawnX, spawnZ, aimX, aimZ, radius)
   let best: { x: number; z: number; length: number } | null = null
-  for (const sign of [1, -1]) {
-    for (const gap of [2.4, 4, 6, 8]) {
-      const wx = hitX + px * sign * gap + blocked.nx * 1.15
-      const wz = hitZ + pz * sign * gap + blocked.nz * 1.15
-      if (!isInsideArena(wx, wz, radius)) continue
-      if (coverHit(fromX, fromZ, wx, wz, radius)) continue
-      if (coverHit(wx, wz, toX, toZ, radius)) continue
-      const path = Math.hypot(wx - fromX, wz - fromZ) + Math.hypot(toX - wx, toZ - wz)
-      if (!best || path < best.length) best = { x: wx, z: wz, length: path }
-    }
+  for (const gate of gates) {
+    if (!isInsideArena(gate.x, gate.z, radius)) continue
+    if (coverHit(spawnX, spawnZ, gate.x, gate.z, radius)) continue
+    if (coverHit(gate.x, gate.z, aimX, aimZ, radius)) continue
+    const length = Math.hypot(gate.x - spawnX, gate.z - spawnZ) + Math.hypot(aimX - gate.x, aimZ - gate.z)
+    if (!best || length < best.length) best = { x: gate.x, z: gate.z, length }
   }
   return best
+}
+
+function wallGates(wall: WallBlock, radius: number): { x: number; z: number }[] {
+  const bounds = wallBounds(wall, radius + RECURVE_GATE_GAP)
+  const corners: readonly (readonly [number, number])[] = [
+    [bounds.minX, bounds.minZ],
+    [bounds.maxX, bounds.minZ],
+    [bounds.maxX, bounds.maxZ],
+    [bounds.minX, bounds.maxZ],
+  ]
+  return corners.map(([cornerX, cornerZ]) => {
+    let outX = cornerX - wall.x
+    let outZ = cornerZ - wall.z
+    const length = Math.hypot(outX, outZ) || 1
+    outX /= length
+    outZ /= length
+    return {
+      x: cornerX + outX * RECURVE_CORNER_PUSH,
+      z: cornerZ + outZ * RECURVE_CORNER_PUSH,
+    }
+  })
+}
+
+function treeGates(
+  treeX: number,
+  treeZ: number,
+  spawnX: number,
+  spawnZ: number,
+  aimX: number,
+  aimZ: number,
+  radius: number,
+): { x: number; z: number }[] {
+  const dx = aimX - spawnX
+  const dz = aimZ - spawnZ
+  const length = Math.hypot(dx, dz) || 1
+  const sideX = -dz / length
+  const sideZ = dx / length
+  const reach = TREE_TRUNK_RADIUS + radius + RECURVE_GATE_GAP
+  return [
+    { x: treeX + sideX * reach, z: treeZ + sideZ * reach },
+    { x: treeX - sideX * reach, z: treeZ - sideZ * reach },
+  ]
+}
+
+function buildFillet(
+  spawnX: number,
+  spawnZ: number,
+  gateX: number,
+  gateZ: number,
+  aimX: number,
+  aimZ: number,
+  arrowRadius: number,
+): { t1x: number; t1z: number; t2x: number; t2z: number; curve: FlightCurve } | null {
+  let d1x = gateX - spawnX
+  let d1z = gateZ - spawnZ
+  const leg1 = Math.hypot(d1x, d1z)
+  if (leg1 < 1e-4) return null
+  d1x /= leg1
+  d1z /= leg1
+  let d2x = aimX - gateX
+  let d2z = aimZ - gateZ
+  const leg2 = Math.hypot(d2x, d2z)
+  if (leg2 < 1e-4) return null
+  d2x /= leg2
+  d2z /= leg2
+  const theta = Math.acos(clampUnit(-(d1x * d2x + d1z * d2z)))
+  if (theta > Math.PI - 0.08 || theta < 0.08) return null
+  const half = theta / 2
+  const tanHalf = Math.tan(half)
+  const sinHalf = Math.sin(half)
+  if (tanHalf < 1e-4 || sinHalf < 1e-4) return null
+  const maxRadius = Math.min(leg1, leg2) * 0.92 * tanHalf
+  if (maxRadius < RECURVE_CURVE_MIN_RADIUS) return null
+  let radius = Math.min(RECURVE_CURVE_RADIUS, maxRadius)
+  const bisectorX = -d1x + d2x
+  const bisectorZ = -d1z + d2z
+  const bisector = Math.hypot(bisectorX, bisectorZ)
+  if (bisector < 1e-6) return null
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const setback = radius / tanHalf
+    const t1x = gateX - d1x * setback
+    const t1z = gateZ - d1z * setback
+    const t2x = gateX + d2x * setback
+    const t2z = gateZ + d2z * setback
+    const cx = gateX + (bisectorX / bisector) * (radius / sinHalf)
+    const cz = gateZ + (bisectorZ / bisector) * (radius / sinHalf)
+    const entry = Math.atan2(t1z - cz, t1x - cx)
+    let sweep = Math.atan2(t2z - cz, t2x - cx) - entry
+    while (sweep > Math.PI) sweep -= Math.PI * 2
+    while (sweep < -Math.PI) sweep += Math.PI * 2
+    if (!arcBlocked(cx, cz, radius, entry, sweep, arrowRadius)) {
+      return { t1x, t1z, t2x, t2z, curve: { cx, cz, radius, sweep, entry } }
+    }
+    radius *= 0.65
+    if (radius < RECURVE_CURVE_MIN_RADIUS) return null
+  }
+  return null
+}
+
+function arcBlocked(
+  cx: number,
+  cz: number,
+  radius: number,
+  entry: number,
+  sweep: number,
+  arrowRadius: number,
+): boolean {
+  const steps = 8
+  let prevX = cx + Math.cos(entry) * radius
+  let prevZ = cz + Math.sin(entry) * radius
+  for (let step = 1; step <= steps; step += 1) {
+    const angle = entry + (sweep * step) / steps
+    const x = cx + Math.cos(angle) * radius
+    const z = cz + Math.sin(angle) * radius
+    if (coverHit(prevX, prevZ, x, z, arrowRadius)) return true
+    prevX = x
+    prevZ = z
+  }
+  return false
+}
+
+function clampUnit(value: number): number {
+  return Math.min(1, Math.max(-1, value))
 }
 
 interface Step {

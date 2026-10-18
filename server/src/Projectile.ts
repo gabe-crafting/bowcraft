@@ -1,4 +1,4 @@
-import type { ProjectileSpec, ShotArrow } from '@bounty/shared'
+import type { FlightCurve, ProjectileSpec, ShotArrow } from '@bounty/shared'
 
 let nextProjectileId = 1
 
@@ -10,9 +10,13 @@ export class Projectile {
   vx: number
   vy: number
   vz: number
-  /** One optional bend. After the arrow passes it, the heading changes once. */
+  /** Straight flight ends here. Cleared once the bend starts. */
   bendX: number | null
   bendZ: number | null
+  /** Circular bend. Null for a sharp turn or a straight shot. */
+  curve: FlightCurve | null
+  /** Radians already traveled along `curve.sweep`. */
+  curveAngle = 0
   turned = false
   landX: number
   landZ: number
@@ -34,6 +38,7 @@ export class Projectile {
     landZ: number,
     bendX: number | null,
     bendZ: number | null,
+    curve: FlightCurve | null,
     readonly spec: ProjectileSpec,
     readonly arrow: ShotArrow,
   ) {
@@ -49,6 +54,7 @@ export class Projectile {
     this.landZ = landZ
     this.bendX = bendX
     this.bendZ = bendZ
+    this.curve = curve
   }
 
   heading(): { dirX: number; dirY: number; dirZ: number } {
