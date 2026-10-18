@@ -2,6 +2,7 @@ import {
   BUSH_COLOR,
   BUSH_DARK,
   BUSHES,
+  bushRadius,
   COVER_WALL_COLOR,
   COVER_WALL_HEIGHT,
   TREE_LEAF_COLOR,
@@ -45,7 +46,7 @@ export class Scenery {
     }
 
     for (const spot of BUSHES) {
-      this.group.add(makeBush(spot.x, spot.z, spot.scale, bush, bushDark))
+      this.group.add(makeBush(spot.x, spot.z, bushRadius(spot), bush, bushDark))
     }
   }
 
@@ -86,21 +87,23 @@ function makeTree(
 function makeBush(
   x: number,
   z: number,
-  scale: number,
+  radius: number,
   light: MeshStandardMaterial,
   dark: MeshStandardMaterial,
 ): Group {
   const bush = new Group()
   bush.position.set(x, 0, z)
-  bush.scale.setScalar(scale)
+  bush.scale.setScalar(radius)
   const puffs: readonly [number, number, number, number, MeshStandardMaterial][] = [
-    [0, 0.28, 0, 0.42, light],
-    [-0.28, 0.2, 0.12, 0.3, dark],
-    [0.26, 0.18, -0.1, 0.28, light],
-    [0.05, 0.34, 0.2, 0.22, dark],
+    [0, 0.42, 0, 0.62, light],
+    [-0.42, 0.32, 0.18, 0.48, dark],
+    [0.4, 0.3, -0.22, 0.46, light],
+    [0.12, 0.55, 0.38, 0.36, dark],
+    [-0.16, 0.28, -0.46, 0.4, light],
+    [0.28, 0.62, 0.08, 0.3, dark],
   ]
-  for (const [px, py, pz, radius, material] of puffs) {
-    const puff = new Mesh(new SphereGeometry(radius, 5, 3), material)
+  for (const [px, py, pz, puffRadius, material] of puffs) {
+    const puff = new Mesh(new SphereGeometry(puffRadius, 5, 3), material)
     puff.position.set(px, py, pz)
     bush.add(puff)
   }

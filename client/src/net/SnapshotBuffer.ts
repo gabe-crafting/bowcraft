@@ -1,5 +1,8 @@
 import {
   TELEPORT_SNAP_DISTANCE,
+  type ArrowStackSnapshot,
+  type DummySnapshot,
+  type ExplosionSnapshot,
   type PlayerSnapshot,
   type ProjectileSnapshot,
   type StateMessage,
@@ -10,6 +13,9 @@ export interface RenderSample {
   players: PlayerSnapshot[]
   projectiles: ProjectileSnapshot[]
   weapons: WeaponSnapshot[]
+  stacks: ArrowStackSnapshot[]
+  dummies: DummySnapshot[]
+  explosions: ExplosionSnapshot[]
 }
 
 interface TimedSnapshot {
@@ -35,6 +41,9 @@ export class SnapshotBuffer {
         players: latest.state.players,
         projectiles: latest.state.projectiles,
         weapons: latest.state.weapons,
+        stacks: latest.state.stacks,
+        dummies: latest.state.dummies,
+        explosions: latest.state.explosions,
       }
     }
 
@@ -66,6 +75,8 @@ function blend(before: StateMessage, after: StateMessage, alpha: number): Render
   const projectiles = after.projectiles.map((projectile) => {
     const prior = previousProjectiles.get(projectile.id)
     if (!prior) return projectile
+    const turned = prior.dirX * projectile.dirX + prior.dirZ * projectile.dirZ < 0.35
+    if (turned) return projectile
     return {
       ...projectile,
       x: prior.x + (projectile.x - prior.x) * alpha,
@@ -84,7 +95,14 @@ function blend(before: StateMessage, after: StateMessage, alpha: number): Render
     }
   })
 
-  return { players, projectiles, weapons }
+  return {
+    players,
+    projectiles,
+    weapons,
+    stacks: after.stacks,
+    dummies: after.dummies,
+    explosions: after.explosions,
+  }
 }
 
 function clamp01(value: number): number {

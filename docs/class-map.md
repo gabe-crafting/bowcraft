@@ -14,6 +14,9 @@ classDiagram
   Game *-- Player
   Game *-- Projectile
   Game *-- Weapon
+  Game *-- ArrowStack
+  Game *-- Dummy
+  Game *-- Explosion
   Player --> Weapon
   Player --> InputMessage
   Weapon --> ProjectileSpec
@@ -24,6 +27,9 @@ classDiagram
   SceneManager *-- PlayerView
   SceneManager *-- ProjectileView
   SceneManager *-- WeaponView
+  SceneManager *-- ArrowStackView
+  SceneManager *-- DummyView
+  SceneManager *-- ExplosionView
   SceneManager *-- RadialMenu
   SceneManager *-- Fog
   PlayerView --> BowView
@@ -37,12 +43,15 @@ classDiagram
   StateMessage *-- PlayerSnapshot
   StateMessage *-- ProjectileSnapshot
   StateMessage *-- WeaponSnapshot
+  StateMessage *-- ArrowStackSnapshot
+  StateMessage *-- DummySnapshot
+  StateMessage *-- ExplosionSnapshot
   Hud --> Nameplate
 ```
 
 ## Server
 
-`server/src/Game.ts`, `server/src/Player.ts`, `server/src/Weapon.ts`, `server/src/Projectile.ts`
+`server/src/Game.ts`, `server/src/Player.ts`, `server/src/Weapon.ts`, `server/src/Projectile.ts`, `server/src/ArrowStack.ts`, `server/src/Dummy.ts`, `server/src/Explosion.ts`
 
 ```mermaid
 classDiagram
@@ -51,6 +60,9 @@ classDiagram
     -Map~string, Player~ players
     -Projectile[] projectiles
     -Weapon[] groundWeapons
+    -ArrowStack[] arrowStacks
+    -Dummy[] dummies
+    -Explosion[] explosions
     -number tickCount
     -number elapsedMs
     +number playerCount
@@ -67,8 +79,11 @@ classDiagram
     +boolean alive
     +number respawnAtMs
     +number lastShotMs
+    +number exposedUntilMs
     +InputMessage input
     +Weapon weapon
+    +number[] quiver
+    +string selected
   }
   class Weapon {
     +string id
@@ -87,6 +102,28 @@ classDiagram
     +number x
     +number z
     +number traveled
+    +string arrow
+  }
+  class ArrowStack {
+    +string id
+    +string kind
+    +number x
+    +number z
+    +number count
+  }
+  class Dummy {
+    +string id
+    +number x
+    +number z
+    +number hp
+    +boolean alive
+  }
+  class Explosion {
+    +string id
+    +number x
+    +number z
+    +number radius
+    +number bornMs
   }
   class ProjectileSpec {
     +number speed
@@ -95,18 +132,22 @@ classDiagram
     +number radius
     +boolean explodes
     +boolean penetrates
+    +boolean ricochets
     +number explosionRadius
     +number fireCooldownMs
   }
   Game *-- Player
   Game *-- Projectile
   Game *-- Weapon
+  Game *-- ArrowStack
+  Game *-- Dummy
+  Game *-- Explosion
   Player --> Weapon
   Weapon --> ProjectileSpec
   Projectile --> ProjectileSpec
 ```
 
-Held weapons stay on the player. `groundWeapons` is only the ones lying in the arena. `Weapon` creates each `Projectile` from its spec.
+Held weapons stay on the player. `groundWeapons` is only the ones lying in the arena. `arrowStacks` are piles of ricochet, explosion, bodkin, and flare arrows. Walking over a pile adds them to `quiver`. `selected` is `normal` for the unlimited arrow, or one of those four. Ricochet arrows bounce off walls, trunks, and the arena edge. Explosion arrows burst on those surfaces, on hunters, and on dummies, and leave a short `Explosion`. Bodkin arrows pass through walls and trunks. Flare arrows fly slowly and light a full circle, blocked by walls and trunks, until they land. `Dummy` targets stand along the walls and across the arena. They take arrow and blast damage and stay fallen at 0 hp. `Weapon` creates each `Projectile` from the bow and the selected arrow. The bow still sets the time between shots.
 
 ## Client
 
@@ -130,6 +171,9 @@ classDiagram
     -Map~string, PlayerView~ playerViews
     -Map~string, ProjectileView~ projectileViews
     -Map~string, WeaponView~ weaponViews
+    -Map~string, ArrowStackView~ stackViews
+    -Map~string, DummyView~ dummyViews
+    -Map~string, ExplosionView~ explosionViews
     -RadialMenu radial
     -Fog fog
     -Raycaster raycaster
@@ -152,6 +196,7 @@ classDiagram
     +Group group
     -BowView bow
     -string bowKind
+    -string nocked
     -Mesh bowArm
     -Mesh drawArm
     -Group leftLeg
@@ -167,6 +212,8 @@ classDiagram
     -number height
     -number bend
     -number drawDistance
+    -boolean hasArrow
+    -string nockKind
     -number shotStarted
   }
   class ProjectileView {
@@ -174,6 +221,21 @@ classDiagram
   }
   class WeaponView {
     +Group group
+  }
+  class ArrowStackView {
+    +Group group
+  }
+  class DummyView {
+    +Group group
+    -Group body
+    -Mesh fill
+    -Group bar
+  }
+  class ExplosionView {
+    +Group group
+    -Mesh ring
+    -Mesh core
+    -Mesh[] shards
   }
   class Fog {
     -ShaderMaterial material
@@ -207,6 +269,7 @@ classDiagram
     -boolean shootLatched
     -boolean menuDown
     -boolean menuReleaseLatched
+    -number slot
     -boolean attached
     +object pointer
   }
@@ -222,12 +285,27 @@ classDiagram
   class Hud {
     -HTMLDivElement root
     -Map~string, PlateView~ plates
+    -HTMLDivElement hotbar
+    -HotbarSlot[] slots
+    -function onSelectHandler
+  }
+  class HotbarSlot {
+    +HTMLDivElement root
+    +HTMLDivElement icon
+    +HTMLDivElement tip
+    +HTMLSpanElement count
+    +HTMLDivElement sweep
+    +HTMLSpanElement timer
+    +string iconKey
   }
   SceneManager *-- Arena
   SceneManager *-- Scenery
   SceneManager *-- PlayerView
   SceneManager *-- ProjectileView
   SceneManager *-- WeaponView
+  SceneManager *-- ArrowStackView
+  SceneManager *-- DummyView
+  SceneManager *-- ExplosionView
   SceneManager *-- RadialMenu
   SceneManager *-- Fog
   PlayerView --> BowView
@@ -236,11 +314,12 @@ classDiagram
   SceneManager --> SnapshotBuffer
   SceneManager --> InputManager
   SceneManager --> Hud
+  Hud --> HotbarSlot
 ```
 
 ## Messages
 
-Interfaces, not classes. `Player` stores `InputMessage`. `Connection` and `SnapshotBuffer` carry `StateMessage`. `Hud` draws `Nameplate`. `RadialOption` is the menu entry `{ id, label }`. `WallBlock`, `TreeSpot`, and `BushSpot` are the static map. Walls and tree trunks block hunters, arrows, and sight. Bushes do not. Sight is a cone in front of the hunter.
+Interfaces, not classes. `Player` stores `InputMessage`. `Connection` and `SnapshotBuffer` carry `StateMessage`. `Hud` draws `Nameplate` and the five hotbar squares. `RadialOption` is the menu entry `{ id, label }`. `WallBlock`, `TreeSpot`, and `BushSpot` are the static map. Walls and tree trunks block hunters, arrows, and sight. Bushes do not. A hunter inside a bush is hidden from everyone else until they loose an arrow, which reveals them for two seconds. `PlayerSnapshot.hidden` is that state for the hunter's own client. Sight is a cone in front of the hunter. `InputMessage.slot` asks for the bow (`0`) or a quiver slot (`1` to `4`). `selected` is the arrow that will be shot. `quiver` counts ricochet, explosion, bodkin, and flare. Normal arrows are unlimited. `cooldownMs` is the wait left on the bow. A flying flare reveals hunters, arrows, bows, stacks, and dummies inside its circle, even outside the view cone. `DummySnapshot` is a straw target. `ExplosionSnapshot.ageMs` drives the blast animation.
 
 ```mermaid
 classDiagram
@@ -253,6 +332,7 @@ classDiagram
     +boolean right
     +number aim
     +boolean shoot
+    +number slot
   }
   class ActionMessage {
     +string type
@@ -279,6 +359,10 @@ classDiagram
     +boolean alive
     +number color
     +string weaponId
+    +boolean hidden
+    +string selected
+    +number[] quiver
+    +number cooldownMs
   }
   class ProjectileSnapshot {
     +string id
@@ -287,6 +371,28 @@ classDiagram
     +number z
     +number dirX
     +number dirZ
+    +string arrow
+  }
+  class ArrowStackSnapshot {
+    +string id
+    +string kind
+    +number x
+    +number z
+    +number count
+  }
+  class DummySnapshot {
+    +string id
+    +number x
+    +number z
+    +number hp
+    +boolean alive
+  }
+  class ExplosionSnapshot {
+    +string id
+    +number x
+    +number z
+    +number radius
+    +number ageMs
   }
   class WeaponSnapshot {
     +string id
@@ -301,6 +407,9 @@ classDiagram
     +PlayerSnapshot[] players
     +ProjectileSnapshot[] projectiles
     +WeaponSnapshot[] weapons
+    +ArrowStackSnapshot[] stacks
+    +DummySnapshot[] dummies
+    +ExplosionSnapshot[] explosions
   }
   class WallBlock {
     +number x
@@ -328,4 +437,7 @@ classDiagram
   StateMessage *-- PlayerSnapshot
   StateMessage *-- ProjectileSnapshot
   StateMessage *-- WeaponSnapshot
+  StateMessage *-- ArrowStackSnapshot
+  StateMessage *-- DummySnapshot
+  StateMessage *-- ExplosionSnapshot
 ```

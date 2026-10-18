@@ -1,4 +1,4 @@
-import type { ProjectileSpec } from '@bounty/shared'
+import type { ProjectileSpec, ShotArrow } from '@bounty/shared'
 
 let nextProjectileId = 1
 
@@ -12,9 +12,10 @@ export class Projectile {
     readonly ownerId: string,
     x: number,
     z: number,
-    readonly dirX: number,
-    readonly dirZ: number,
+    public dirX: number,
+    public dirZ: number,
     readonly spec: ProjectileSpec,
+    readonly arrow: ShotArrow,
   ) {
     this.id = `p${nextProjectileId}`
     nextProjectileId += 1

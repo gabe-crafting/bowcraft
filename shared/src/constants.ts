@@ -44,7 +44,21 @@ export const SHORTBOW_SPEED = 30
 export const SHORTBOW_RANGE = 24
 export const SHORTBOW_COOLDOWN_MS = 320
 export const EXPLOSION_RADIUS = 2.5
+/** How long the blast stays on screen. */
+export const EXPLOSION_ANIM_MS = 640
+/** Straw target. Arrows and blasts can wound it. */
+export const DUMMY_HP = 70
+export const DUMMY_RADIUS = 0.34
 export const PICKUP_RADIUS = 1.6
+/** Arrows in one pile on the ground. */
+export const ARROW_STACK_SIZE = 4
+/** Flare arrows crawl so a hunter can follow them through the fog. */
+export const FLARE_SPEED_SCALE = 0.22
+export const FLARE_RANGE_SCALE = 0.8
+export const FLARE_DAMAGE_SCALE = 0.3
+/** Clear circle around a flying flare. It fades across FLARE_LIGHT_FALLOFF. */
+export const FLARE_LIGHT_RADIUS = 7
+export const FLARE_LIGHT_FALLOFF = 1.8
 export const RESPAWN_DELAY_MS = 2_000
 
 /** Clear sight straight ahead. It fades across VISION_FALLOFF past this. */
@@ -82,6 +96,10 @@ export const TREE_LEAF_COLOR = 0x3c7338
 export const TREE_LEAF_DARK = 0x2b552c
 export const BUSH_COLOR = 0x4d8a42
 export const BUSH_DARK = 0x2f5c2c
+/** Hide circle at scale 1. A hunter inside it cannot be seen. */
+export const BUSH_HIDE_RADIUS = 1.55
+/** Loosing an arrow reveals a hunter who is standing in a bush. */
+export const BUSH_REVEAL_MS = 2_000
 export const SKY_COLOR = 0xb7c4ce
 export const PROJECTILE_COLOR = 0xf2c14e
 export const AMBIENT_COLOR = 0xd5dde6

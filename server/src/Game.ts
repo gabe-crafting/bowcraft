@@ -1,4 +1,15 @@
 import {
+  ARROW_KINDS,
+  ARROW_STACK_SIZE,
+  arrowShot,
+  BUSH_REVEAL_MS,
+  DUMMY_RADIUS,
+  EXPLOSION_ANIM_MS,
+  FLARE_LIGHT_FALLOFF,
+  FLARE_LIGHT_RADIUS,
+  isInBush,
+  isInLight,
+  isInSight,
   MAX_HP,
   MAX_PLAYERS,
   PICKUP_RADIUS,
@@ -8,22 +19,43 @@ import {
   SPAWN_POINTS,
   TICK_MS,
   TICK_SECONDS,
-  isInSight,
+  TREES,
+  TREE_TRUNK_RADIUS,
+  WALLS,
+  wallBounds,
+  type ArrowKind,
+  type ArrowStackSnapshot,
+  type DummySnapshot,
+  type ExplosionSnapshot,
   type InputMessage,
   type StateMessage,
   type WeaponAction,
   type WeaponKind,
   type WeaponSnapshot,
 } from '@bounty/shared'
+import { ArrowStack } from './ArrowStack'
+import { Dummy } from './Dummy'
+import { Explosion } from './Explosion'
 import { Player } from './Player'
 import type { Projectile } from './Projectile'
 import { Weapon } from './Weapon'
-import { clampToArena, coverBlockT, isInsideArena, resolveCover, segmentHitT, separateCircles } from './physics'
+import {
+  arenaBorderHit,
+  arenaLimit,
+  clampToArena,
+  coverHit,
+  resolveCover,
+  segmentHitT,
+  separateCircles,
+} from './physics'
 
 export class Game {
   private readonly players = new Map<string, Player>()
   private projectiles: Projectile[] = []
   private groundWeapons: Weapon[] = []
+  private arrowStacks: ArrowStack[] = []
+  private dummies: Dummy[] = []
+  private explosions: Explosion[] = []
   private tickCount = 0
   private elapsedMs = 0
 
@@ -35,6 +67,8 @@ export class Game {
       throw new Error('Not enough player colors for MAX_PLAYERS')
     }
     this.scatterBows()
+    this.scatterArrows()
+    this.scatterDummies()
   }
 
   get playerCount(): number {
@@ -75,6 +109,7 @@ export class Game {
   tick(): void {
     this.tickCount += 1
     this.elapsedMs += TICK_MS
+    this.decayExplosions()
     this.respawnPlayers()
 
     for (const player of this.players.values()) {
@@ -85,6 +120,7 @@ export class Game {
     this.separatePlayers()
     for (const player of this.players.values()) this.settle(player)
 
+    this.collectArrows()
     for (const player of this.players.values()) {
       this.tryShoot(player)
     }
@@ -106,6 +142,15 @@ export class Game {
         alive: player.alive,
         color: player.color,
         weaponId: player.weapon?.id ?? null,
+        hidden: this.isConcealed(player),
+        selected: player.selected,
+        quiver: [
+          player.quiver[0] ?? 0,
+          player.quiver[1] ?? 0,
+          player.quiver[2] ?? 0,
+          player.quiver[3] ?? 0,
+        ],
+        cooldownMs: this.cooldownMs(player),
       })),
       projectiles: this.projectiles.map((projectile) => ({
         id: projectile.id,
@@ -114,25 +159,36 @@ export class Game {
         z: projectile.z,
         dirX: projectile.dirX,
         dirZ: projectile.dirZ,
+        arrow: projectile.arrow,
       })),
       weapons: this.weaponSnapshots(),
+      stacks: this.stackSnapshots(),
+      dummies: this.dummySnapshots(),
+      explosions: this.explosionSnapshots(),
     }
   }
 
   snapshotFor(viewerId: string): StateMessage {
     const state = this.snapshot()
     const viewer = this.players.get(viewerId)
-    if (!viewer) return { ...state, players: [], projectiles: [], weapons: [] }
+    if (!viewer) {
+      return { ...state, players: [], projectiles: [], weapons: [], stacks: [], dummies: [], explosions: [] }
+    }
 
     return {
       ...state,
       players: state.players.filter(
-        (player) => player.id === viewerId || this.inSight(viewer, player.x, player.z, 0.4),
+        (player) =>
+          player.id === viewerId ||
+          (!player.hidden && this.seen(viewer, player.x, player.z, 0.4)),
       ),
       projectiles: state.projectiles.filter((projectile) =>
-        this.inSight(viewer, projectile.x, projectile.z, 0.15),
+        this.seen(viewer, projectile.x, projectile.z, 0.15),
       ),
-      weapons: state.weapons.filter((weapon) => this.inSight(viewer, weapon.x, weapon.z, 0.3)),
+      weapons: state.weapons.filter((weapon) => this.seen(viewer, weapon.x, weapon.z, 0.3)),
+      stacks: state.stacks.filter((stack) => this.seen(viewer, stack.x, stack.z, 0.3)),
+      dummies: state.dummies.filter((dummy) => this.seen(viewer, dummy.x, dummy.z, 0.35)),
+      explosions: state.explosions.filter((blast) => this.seen(viewer, blast.x, blast.z, 0.4)),
     }
   }
 
@@ -167,8 +223,31 @@ export class Game {
     }
   }
 
+  private isConcealed(player: Player): boolean {
+    if (!player.alive) return false
+    if (this.elapsedMs < player.exposedUntilMs) return false
+    return isInBush(player.x, player.z)
+  }
+
   private inSight(viewer: Player, x: number, z: number, margin: number): boolean {
     return isInSight(viewer.x, viewer.z, viewer.aim, x, z, margin)
+  }
+
+  private seen(viewer: Player, x: number, z: number, margin: number): boolean {
+    if (this.inSight(viewer, x, z, margin)) return true
+    return this.projectiles.some(
+      (projectile) =>
+        projectile.arrow === 'flare' &&
+        isInLight(
+          projectile.x,
+          projectile.z,
+          x,
+          z,
+          FLARE_LIGHT_RADIUS,
+          FLARE_LIGHT_FALLOFF,
+          margin,
+        ),
+    )
   }
 
   private scatterBows(): void {
@@ -247,57 +326,222 @@ export class Game {
     if (!player.alive || !player.input.shoot || !weapon) return
     if (this.elapsedMs - player.lastShotMs < weapon.spec.fireCooldownMs) return
 
+    const arrow = player.consumeArrow()
     player.lastShotMs = this.elapsedMs
-    this.projectiles.push(weapon.spawnProjectile(player.id, player.x, player.z, player.aim))
+    player.exposedUntilMs = this.elapsedMs + BUSH_REVEAL_MS
+    this.projectiles.push(
+      weapon.spawnProjectile(
+        player.id,
+        player.x,
+        player.z,
+        player.aim,
+        arrowShot(weapon.spec, arrow),
+        arrow,
+      ),
+    )
+  }
+
+  private cooldownMs(player: Player): number {
+    const weapon = player.weapon
+    if (!weapon) return 0
+    return Math.max(0, weapon.spec.fireCooldownMs - (this.elapsedMs - player.lastShotMs))
+  }
+
+  private collectArrows(): void {
+    const remaining: ArrowStack[] = []
+    for (const stack of this.arrowStacks) {
+      const hunter = this.hunterAt(stack.x, stack.z)
+      if (!hunter) {
+        remaining.push(stack)
+        continue
+      }
+      hunter.addArrows(stack.kind, stack.count)
+    }
+    this.arrowStacks = remaining
+  }
+
+  private hunterAt(x: number, z: number): Player | null {
+    for (const player of this.players.values()) {
+      if (!player.alive) continue
+      const dx = player.x - x
+      const dz = player.z - z
+      if (dx * dx + dz * dz <= PICKUP_RADIUS * PICKUP_RADIUS) return player
+    }
+    return null
+  }
+
+  private stackSnapshots(): ArrowStackSnapshot[] {
+    return this.arrowStacks.map((stack) => ({
+      id: stack.id,
+      kind: stack.kind,
+      x: stack.x,
+      z: stack.z,
+      count: stack.count,
+    }))
+  }
+
+  private scatterArrows(): void {
+    const featured: readonly [number, number, ArrowKind][] = [
+      [-12.4, -11.2, 'ricochet'],
+      [-11.0, -12.6, 'explosion'],
+      [-13.2, -9.4, 'bodkin'],
+      [-10.2, -10.6, 'flare'],
+      [13.0, 16.2, 'ricochet'],
+      [15.2, 15.8, 'explosion'],
+      [14.4, 16.8, 'bodkin'],
+      [12.2, 15.4, 'flare'],
+    ]
+    for (const [x, z, kind] of featured) this.placeStack(kind, x, z)
+    let index = 0
+    for (let x = -14; x <= 14; x += 4) {
+      for (let z = -14; z <= 14; z += 4) {
+        const kind = ARROW_KINDS[index % ARROW_KINDS.length]
+        if (!kind || this.arrowBlocked(x, z) || this.stackNear(x, z) || this.nearSpawn(x, z))
+          continue
+        this.placeStack(kind, x, z)
+        index += 1
+      }
+    }
+  }
+
+  private placeStack(kind: ArrowKind, x: number, z: number): void {
+    this.arrowStacks.push(new ArrowStack(kind, x, z, ARROW_STACK_SIZE))
+  }
+
+  private nearSpawn(x: number, z: number): boolean {
+    const reach = PICKUP_RADIUS + 0.5
+    return SPAWN_POINTS.some((spawn) => {
+      const dx = spawn.x - x
+      const dz = spawn.z - z
+      return dx * dx + dz * dz < reach * reach
+    })
+  }
+
+  private stackNear(x: number, z: number): boolean {
+    return this.arrowStacks.some((stack) => {
+      const dx = stack.x - x
+      const dz = stack.z - z
+      return dx * dx + dz * dz < 1.2 * 1.2
+    })
+  }
+
+  private arrowBlocked(x: number, z: number): boolean {
+    for (const wall of WALLS) {
+      const bounds = wallBounds(wall, 0.8)
+      if (x >= bounds.minX && x <= bounds.maxX && z >= bounds.minZ && z <= bounds.maxZ) return true
+    }
+    for (const tree of TREES) {
+      const dx = tree.x - x
+      const dz = tree.z - z
+      const reach = TREE_TRUNK_RADIUS + 0.7
+      if (dx * dx + dz * dz < reach * reach) return true
+    }
+    return false
   }
 
   private advanceProjectiles(): void {
     const remaining: Projectile[] = []
-
     for (const projectile of this.projectiles) {
-      const rangeLeft = projectile.spec.maxRange - projectile.traveled
-      if (rangeLeft <= 0) continue
+      if (this.fly(projectile)) remaining.push(projectile)
+    }
+    this.projectiles = remaining
+  }
 
-      const step = Math.min(projectile.spec.speed * TICK_SECONDS, rangeLeft)
-      const segment = projectile.advance(step)
-      const hitRadius = PLAYER_RADIUS + projectile.spec.radius
-      const hit = this.findHit(
+  /** Returns true while the arrow is still in the air. */
+  private fly(projectile: Projectile): boolean {
+    const spec = projectile.spec
+    if (projectile.traveled >= spec.maxRange) return false
+
+    let remaining = Math.min(spec.speed * TICK_SECONDS, spec.maxRange - projectile.traveled)
+    for (let bounce = 0; bounce < 5 && remaining > 1e-4; bounce += 1) {
+      const x0 = projectile.x
+      const z0 = projectile.z
+      const x1 = x0 + projectile.dirX * remaining
+      const z1 = z0 + projectile.dirZ * remaining
+      const struck = this.findHit(
         projectile.ownerId,
-        segment.x0,
-        segment.z0,
-        segment.x1,
-        segment.z1,
-        hitRadius,
+        x0,
+        z0,
+        x1,
+        z1,
+        PLAYER_RADIUS + spec.radius,
       )
-      const coverT = projectile.spec.penetrates
-        ? null
-        : coverBlockT(segment.x0, segment.z0, segment.x1, segment.z1, projectile.spec.radius)
-      if (coverT !== null && (hit === null || coverT <= hit.t)) {
-        if (projectile.spec.explodes) {
-          const x = segment.x0 + (segment.x1 - segment.x0) * coverT
-          const z = segment.z0 + (segment.z1 - segment.z0) * coverT
-          this.explode(projectile, x, z)
-        }
-        continue
+      const dummyHit = this.findDummy(x0, z0, x1, z1, DUMMY_RADIUS + spec.radius)
+      const cover = spec.penetrates ? null : coverHit(x0, z0, x1, z1, spec.radius)
+      const border = spec.penetrates ? null : arenaBorderHit(x0, z0, x1, z1, spec.radius)
+
+      let stopT = 1
+      let mode: 'clear' | 'player' | 'dummy' | 'cover' | 'border' = 'clear'
+      let normalX = 0
+      let normalZ = 0
+      if (struck && struck.t < stopT) {
+        stopT = struck.t
+        mode = 'player'
       }
-      if (hit) {
-        if (projectile.spec.explodes) this.explode(projectile, hit.player.x, hit.player.z)
-        else this.applyDamage(hit.player, projectile.spec.damage)
+      if (dummyHit && dummyHit.t < stopT) {
+        stopT = dummyHit.t
+        mode = 'dummy'
+      }
+      if (cover && cover.t <= stopT) {
+        stopT = cover.t
+        mode = 'cover'
+        normalX = cover.nx
+        normalZ = cover.nz
+      }
+      if (border && border.t <= stopT) {
+        stopT = border.t
+        mode = 'border'
+        normalX = border.nx
+        normalZ = border.nz
+      }
+
+      if (mode === 'clear') {
+        projectile.x = x1
+        projectile.z = z1
+        projectile.traveled += remaining
+        return projectile.traveled < spec.maxRange
+      }
+
+      const traveled = remaining * stopT
+      const hitX = x0 + (x1 - x0) * stopT
+      const hitZ = z0 + (z1 - z0) * stopT
+      projectile.traveled += traveled
+
+      if (mode === 'player' && struck) {
+        if (spec.explodes) this.explode(projectile, struck.player.x, struck.player.z)
+        else this.applyDamage(struck.player, spec.damage)
+        return false
+      }
+
+      if (mode === 'dummy' && dummyHit) {
+        if (spec.explodes) this.explode(projectile, dummyHit.dummy.x, dummyHit.dummy.z)
+        else this.hurtDummy(dummyHit.dummy, spec.damage)
+        return false
+      }
+
+      if (spec.explodes) {
+        this.explode(projectile, hitX, hitZ)
+        return false
+      }
+
+      if (spec.ricochets) {
+        const reflected = reflect(projectile.dirX, projectile.dirZ, normalX, normalZ)
+        const length = Math.hypot(reflected.x, reflected.z)
+        if (length < 1e-6 || traveled < 1e-4) return false
+        projectile.dirX = reflected.x / length
+        projectile.dirZ = reflected.z / length
+        projectile.x = hitX + normalX * 0.04
+        projectile.z = hitZ + normalZ * 0.04
+        remaining -= traveled
         continue
       }
 
-      const blockedByWall =
-        !projectile.spec.penetrates &&
-        !isInsideArena(projectile.x, projectile.z, projectile.spec.radius)
-      const outOfRange = projectile.traveled >= projectile.spec.maxRange
-      if (blockedByWall || outOfRange) {
-        if (projectile.spec.explodes) this.explode(projectile, projectile.x, projectile.z)
-        continue
-      }
-      remaining.push(projectile)
+      projectile.x = hitX
+      projectile.z = hitZ
+      return false
     }
 
-    this.projectiles = remaining
+    return projectile.traveled < spec.maxRange
   }
 
   private settle(player: Player): void {
@@ -331,15 +575,136 @@ export class Game {
   }
 
   private explode(projectile: Projectile, x: number, z: number): void {
-    const radius = projectile.spec.explosionRadius + PLAYER_RADIUS
-    const radiusSquared = radius * radius
+    this.explosions.push(new Explosion(x, z, projectile.spec.explosionRadius, this.elapsedMs))
+    const playerReach = projectile.spec.explosionRadius + PLAYER_RADIUS
+    const playerReachSquared = playerReach * playerReach
     for (const player of this.players.values()) {
       if (!player.alive || player.id === projectile.ownerId) continue
       const dx = player.x - x
       const dz = player.z - z
-      if (dx * dx + dz * dz > radiusSquared) continue
+      if (dx * dx + dz * dz > playerReachSquared) continue
       this.applyDamage(player, projectile.spec.damage)
     }
+    const dummyReach = projectile.spec.explosionRadius + DUMMY_RADIUS
+    const dummyReachSquared = dummyReach * dummyReach
+    for (const dummy of this.dummies) {
+      if (!dummy.alive) continue
+      const dx = dummy.x - x
+      const dz = dummy.z - z
+      if (dx * dx + dz * dz > dummyReachSquared) continue
+      this.hurtDummy(dummy, projectile.spec.damage)
+    }
+  }
+
+  private hurtDummy(dummy: Dummy, damage: number): void {
+    if (!dummy.alive) return
+    dummy.hp = Math.max(0, dummy.hp - damage)
+    if (dummy.hp > 0) return
+    dummy.alive = false
+  }
+
+  private findDummy(
+    x0: number,
+    z0: number,
+    x1: number,
+    z1: number,
+    radius: number,
+  ): { dummy: Dummy; t: number } | null {
+    let closest: Dummy | null = null
+    let closestT = Number.POSITIVE_INFINITY
+    for (const dummy of this.dummies) {
+      if (!dummy.alive) continue
+      const t = segmentHitT(x0, z0, x1, z1, dummy.x, dummy.z, radius)
+      if (t === null || t >= closestT) continue
+      closestT = t
+      closest = dummy
+    }
+    if (!closest) return null
+    return { dummy: closest, t: closestT }
+  }
+
+  private decayExplosions(): void {
+    this.explosions = this.explosions.filter(
+      (blast) => this.elapsedMs - blast.bornMs < EXPLOSION_ANIM_MS,
+    )
+  }
+
+  private dummySnapshots(): DummySnapshot[] {
+    return this.dummies.map((dummy) => ({
+      id: dummy.id,
+      x: dummy.x,
+      z: dummy.z,
+      hp: dummy.hp,
+      alive: dummy.alive,
+    }))
+  }
+
+  private explosionSnapshots(): ExplosionSnapshot[] {
+    return this.explosions.map((blast) => ({
+      id: blast.id,
+      x: blast.x,
+      z: blast.z,
+      radius: blast.radius,
+      ageMs: Math.max(0, this.elapsedMs - blast.bornMs),
+    }))
+  }
+
+  private scatterDummies(): void {
+    for (const wall of WALLS) {
+      const gap = DUMMY_RADIUS + 0.28
+      const bounds = wallBounds(wall, gap)
+      if (wall.width >= wall.depth) {
+        const start = wall.x - wall.width / 2 + 0.7
+        const end = wall.x + wall.width / 2 - 0.5
+        for (let x = start; x <= end; x += 1.7) {
+          this.placeDummy(x, bounds.minZ)
+          this.placeDummy(x, bounds.maxZ)
+        }
+      } else {
+        const start = wall.z - wall.depth / 2 + 0.7
+        const end = wall.z + wall.depth / 2 - 0.5
+        for (let z = start; z <= end; z += 1.7) {
+          this.placeDummy(bounds.minX, z)
+          this.placeDummy(bounds.maxX, z)
+        }
+      }
+    }
+    for (let x = -13; x <= 13; x += 4) {
+      for (let z = -13; z <= 13; z += 4) this.placeDummy(x, z)
+    }
+    this.placeDummy(-12.6, -12.2)
+    this.placeDummy(-11.2, -13.4)
+    this.placeDummy(12.6, 15.6)
+    this.placeDummy(14.8, 16.2)
+  }
+
+  private placeDummy(x: number, z: number): void {
+    if (this.dummyBlocked(x, z) || this.dummyNear(x, z)) return
+    this.dummies.push(new Dummy(x, z))
+  }
+
+  private dummyNear(x: number, z: number): boolean {
+    return this.dummies.some((dummy) => {
+      const dx = dummy.x - x
+      const dz = dummy.z - z
+      return dx * dx + dz * dz < 1.35 * 1.35
+    })
+  }
+
+  private dummyBlocked(x: number, z: number): boolean {
+    if (this.nearSpawn(x, z)) return true
+    for (const wall of WALLS) {
+      const bounds = wallBounds(wall, DUMMY_RADIUS)
+      if (x >= bounds.minX && x <= bounds.maxX && z >= bounds.minZ && z <= bounds.maxZ) return true
+    }
+    for (const tree of TREES) {
+      const dx = tree.x - x
+      const dz = tree.z - z
+      const reach = TREE_TRUNK_RADIUS + DUMMY_RADIUS
+      if (dx * dx + dz * dz < reach * reach) return true
+    }
+    const limit = arenaLimit(DUMMY_RADIUS)
+    return Math.abs(x) > limit || Math.abs(z) > limit
   }
 
   private applyDamage(player: Player, damage: number): void {
@@ -368,4 +733,15 @@ export class Game {
 
 function scatterLine(): readonly number[] {
   return [-12, -6, 0, 6, 12]
+}
+
+function reflect(
+  dirX: number,
+  dirZ: number,
+  normalX: number,
+  normalZ: number,
+): { x: number; z: number } {
+  const dot = dirX * normalX + dirZ * normalZ
+  if (dot >= 0) return { x: dirX, z: dirZ }
+  return { x: dirX - 2 * dot * normalX, z: dirZ - 2 * dot * normalZ }
 }

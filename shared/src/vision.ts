@@ -41,6 +41,28 @@ export function isInSight(
   return !sightBlocked(originX, originZ, x1, z1)
 }
 
+/** Full circle around a light. Walls and trunks still block the ray. */
+export function isInLight(
+  originX: number,
+  originZ: number,
+  targetX: number,
+  targetZ: number,
+  radius: number,
+  falloff: number,
+  margin: number,
+): boolean {
+  const dx = targetX - originX
+  const dz = targetZ - originZ
+  const distance = Math.hypot(dx, dz)
+  if (distance > radius + falloff) return false
+  if (distance <= Math.max(margin, 0.05)) return true
+
+  const reach = distance - margin
+  const x1 = originX + (dx / distance) * reach
+  const z1 = originZ + (dz / distance) * reach
+  return !sightBlocked(originX, originZ, x1, z1)
+}
+
 function sightBlocked(x0: number, z0: number, x1: number, z1: number): boolean {
   for (const wall of WALLS) {
     const bounds = wallBounds(wall)

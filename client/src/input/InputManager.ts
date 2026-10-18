@@ -21,6 +21,7 @@ export class InputManager {
   private shootLatched = false
   private menuDown = false
   private menuReleaseLatched = false
+  private slot = 0
   private attached = false
 
   get pointer(): { x: number; y: number } {
@@ -56,6 +57,11 @@ export class InputManager {
     return { held: this.menuDown, released }
   }
 
+  select(slot: number): void {
+    if (slot !== 0 && slot !== 1 && slot !== 2 && slot !== 3 && slot !== 4) return
+    this.slot = slot
+  }
+
   consume(aim: number): FrameInput {
     const shoot = !this.menuDown && (this.shootLatched || this.primaryDown)
     this.shootLatched = false
@@ -66,6 +72,7 @@ export class InputManager {
       right: this.held('KeyD', 'ArrowRight'),
       aim,
       shoot,
+      slot: this.slot,
     }
   }
 
@@ -74,6 +81,12 @@ export class InputManager {
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    const slot = slotFrom(event.code)
+    if (slot !== null) {
+      event.preventDefault()
+      this.slot = slot
+      return
+    }
     if (event.code === 'KeyM') {
       if (event.repeat || this.menuDown) return
       this.menuDown = true
@@ -100,6 +113,7 @@ export class InputManager {
 
   private readonly onMouseDown = (event: MouseEvent): void => {
     if (event.button !== 0) return
+    if (event.target instanceof Element && event.target.closest('.hotbar')) return
     this.primaryDown = true
     this.shootLatched = true
   }
@@ -116,4 +130,13 @@ export class InputManager {
     this.menuDown = false
     this.menuReleaseLatched = false
   }
+}
+
+function slotFrom(code: string): number | null {
+  if (code === 'KeyQ') return 0
+  if (code === 'Digit1' || code === 'Numpad1') return 1
+  if (code === 'Digit2' || code === 'Numpad2') return 2
+  if (code === 'Digit3' || code === 'Numpad3') return 3
+  if (code === 'Digit4' || code === 'Numpad4') return 4
+  return null
 }

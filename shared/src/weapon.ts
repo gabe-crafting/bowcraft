@@ -13,8 +13,9 @@ import {
 
 /**
  * Shot profile copied onto each arrow a bow creates.
- * `explodes` deals splash damage at impact and at the end of the range.
- * `penetrates` lets the arrow pass arena walls; it still stops at max range and on players.
+ * `explodes` deals splash damage when the arrow hits a wall, a tree, or a hunter.
+ * `penetrates` lets the arrow pass walls and trunks; it still stops at max range and on players.
+ * `ricochets` bounces off walls, trunks, and the arena edge.
  */
 export interface ProjectileSpec {
   readonly speed: number
@@ -23,11 +24,23 @@ export interface ProjectileSpec {
   readonly radius: number
   readonly explodes: boolean
   readonly penetrates: boolean
+  readonly ricochets: boolean
   readonly explosionRadius: number
   readonly fireCooldownMs: number
 }
 
 export type WeaponKind = 'longbow' | 'shortbow'
+
+export const BOW_NAMES: Record<WeaponKind, { readonly name: string; readonly detail: string }> = {
+  longbow: {
+    name: 'Longbow',
+    detail: 'Heavy draw, long reach, slow to loose again.',
+  },
+  shortbow: {
+    name: 'Shortbow',
+    detail: 'Light draw, shorter reach, quick to loose again.',
+  },
+}
 
 export const BOWS: Record<WeaponKind, ProjectileSpec> = {
   longbow: {
@@ -37,6 +50,7 @@ export const BOWS: Record<WeaponKind, ProjectileSpec> = {
     radius: PROJECTILE_RADIUS,
     explodes: false,
     penetrates: false,
+    ricochets: false,
     explosionRadius: EXPLOSION_RADIUS,
     fireCooldownMs: LONGBOW_COOLDOWN_MS,
   },
@@ -47,6 +61,7 @@ export const BOWS: Record<WeaponKind, ProjectileSpec> = {
     radius: PROJECTILE_RADIUS,
     explodes: false,
     penetrates: false,
+    ricochets: false,
     explosionRadius: EXPLOSION_RADIUS,
     fireCooldownMs: SHORTBOW_COOLDOWN_MS,
   },

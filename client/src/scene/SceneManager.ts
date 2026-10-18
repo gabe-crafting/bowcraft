@@ -17,6 +17,9 @@ import {
   SUN_POSITION_X,
   SUN_POSITION_Y,
   SUN_POSITION_Z,
+  type ArrowStackSnapshot,
+  type DummySnapshot,
+  type ExplosionSnapshot,
   type PlayerSnapshot,
   type ProjectileSnapshot,
   type WeaponKind,
@@ -35,6 +38,9 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three'
+import { ArrowStackView } from '../entities/ArrowStackView'
+import { DummyView } from '../entities/DummyView'
+import { ExplosionView } from '../entities/ExplosionView'
 import { PlayerView } from '../entities/PlayerView'
 import { ProjectileView } from '../entities/ProjectileView'
 import { WeaponView } from '../entities/WeaponView'
@@ -72,6 +78,9 @@ export class SceneManager {
   private readonly playerViews = new Map<string, PlayerView>()
   private readonly projectileViews = new Map<string, ProjectileView>()
   private readonly weaponViews = new Map<string, WeaponView>()
+  private readonly stackViews = new Map<string, ArrowStackView>()
+  private readonly dummyViews = new Map<string, DummyView>()
+  private readonly explosionViews = new Map<string, ExplosionView>()
   private readonly radial: RadialMenu
   private readonly raycaster = new Raycaster()
   private readonly pointer = new Vector2()
@@ -91,6 +100,7 @@ export class SceneManager {
     this.hud = options.hud
     this.playerId = options.playerId
     this.radial = new RadialMenu(options.parent)
+    this.hud.onSelect((slot) => this.input.select(slot))
 
     this.scene.background = new Color(SKY_COLOR)
     this.scene.add(this.arena.group)
@@ -125,9 +135,15 @@ export class SceneManager {
     for (const view of this.playerViews.values()) view.dispose()
     for (const view of this.projectileViews.values()) view.dispose()
     for (const view of this.weaponViews.values()) view.dispose()
+    for (const view of this.stackViews.values()) view.dispose()
+    for (const view of this.dummyViews.values()) view.dispose()
+    for (const view of this.explosionViews.values()) view.dispose()
     this.playerViews.clear()
     this.projectileViews.clear()
     this.weaponViews.clear()
+    this.stackViews.clear()
+    this.dummyViews.clear()
+    this.explosionViews.clear()
     this.radial.dispose()
     this.fog.dispose()
     this.scenery.dispose()
@@ -156,17 +172,21 @@ export class SceneManager {
       this.syncPlayers(sample.players, sample.weapons, now)
       this.syncProjectiles(sample.projectiles, sample.players, now)
       this.syncWeapons(sample.weapons)
+      this.syncStacks(sample.stacks)
+      this.syncDummies(sample.dummies)
+      this.syncExplosions(sample.explosions)
       const local = sample.players.find((player) => player.id === this.playerId) ?? null
       this.updateCamera(local)
       if (local) {
         const aim = this.aimFrom(local.x, local.z)
-        this.fog.follow(local.x, local.z, aim, this.camera)
+        const flares = sample.projectiles.filter((projectile) => projectile.arrow === 'flare')
+        this.fog.follow(local.x, local.z, aim, this.camera, flares)
         this.connection.sendInput(this.input.consume(aim))
         this.updateWeaponMenu(local, sample.weapons)
       } else {
         this.radial.setOpen(false)
       }
-      this.updateHud(sample.players)
+      this.updateHud(sample.players, sample.weapons)
     }
 
     this.fog.render(this.renderer, this.scene, this.camera)
@@ -212,6 +232,8 @@ export class SceneManager {
       }
       view.setVisible(player.alive)
       view.setBow(bowKind(player.weaponId, weapons))
+      view.setArrow(player.selected)
+      view.setConcealed(player.hidden)
       view.setTransform(player.x, player.z, player.aim)
       view.update(now)
     }
@@ -234,7 +256,7 @@ export class SceneManager {
       }
       let view = this.projectileViews.get(projectile.id)
       if (!view) {
-        view = new ProjectileView()
+        view = new ProjectileView(projectile.arrow)
         this.scene.add(view.group)
         this.projectileViews.set(projectile.id, view)
       }
@@ -262,6 +284,52 @@ export class SceneManager {
     this.dropMissing(this.weaponViews, seen)
   }
 
+  private syncStacks(stacks: readonly ArrowStackSnapshot[]): void {
+    const seen = new Set<string>()
+    for (const stack of stacks) {
+      seen.add(stack.id)
+      let view = this.stackViews.get(stack.id)
+      if (!view) {
+        view = new ArrowStackView(stack.kind)
+        this.scene.add(view.group)
+        this.stackViews.set(stack.id, view)
+      }
+      view.setPosition(stack.x, stack.z)
+    }
+    this.dropMissing(this.stackViews, seen)
+  }
+
+  private syncDummies(dummies: readonly DummySnapshot[]): void {
+    const seen = new Set<string>()
+    for (const dummy of dummies) {
+      seen.add(dummy.id)
+      let view = this.dummyViews.get(dummy.id)
+      if (!view) {
+        view = new DummyView()
+        this.scene.add(view.group)
+        this.dummyViews.set(dummy.id, view)
+        view.setPosition(dummy.x, dummy.z)
+      }
+      view.setState(dummy.hp, dummy.alive)
+    }
+    this.dropMissing(this.dummyViews, seen)
+  }
+
+  private syncExplosions(explosions: readonly ExplosionSnapshot[]): void {
+    const seen = new Set<string>()
+    for (const blast of explosions) {
+      seen.add(blast.id)
+      let view = this.explosionViews.get(blast.id)
+      if (!view) {
+        view = new ExplosionView()
+        this.scene.add(view.group)
+        this.explosionViews.set(blast.id, view)
+      }
+      view.setBlast(blast.x, blast.z, blast.radius, blast.ageMs)
+    }
+    this.dropMissing(this.explosionViews, seen)
+  }
+
   private updateWeaponMenu(local: PlayerSnapshot, weapons: readonly WeaponSnapshot[]): void {
     const menu = this.input.pullMenu()
     const show = local.alive && (menu.held || menu.released)
@@ -284,9 +352,11 @@ export class SceneManager {
     }
   }
 
-  private updateHud(players: readonly PlayerSnapshot[]): void {
+  private updateHud(players: readonly PlayerSnapshot[], weapons: readonly WeaponSnapshot[]): void {
     const width = this.parent.clientWidth
     const height = this.parent.clientHeight
+    const local = players.find((player) => player.id === this.playerId) ?? null
+    this.hud.syncLoadout(local, local ? bowKind(local.weaponId, weapons) : null)
     this.hud.sync(
       players.map((player) => {
         this.labelPoint.set(player.x, NAMEPLATE_HEIGHT, player.z)

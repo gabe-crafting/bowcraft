@@ -3,6 +3,7 @@ import {
   PLAYER_RADIUS,
   PROJECTILE_SPAWN_CLEARANCE,
   type ProjectileSpec,
+  type ShotArrow,
   type WeaponKind,
 } from '@bounty/shared'
 import { Projectile } from './Projectile'
@@ -29,17 +30,25 @@ export class Weapon {
     this.z = z
   }
 
-  spawnProjectile(ownerId: string, x: number, z: number, aim: number): Projectile {
+  spawnProjectile(
+    ownerId: string,
+    x: number,
+    z: number,
+    aim: number,
+    spec: ProjectileSpec = this.spec,
+    arrow: ShotArrow = 'normal',
+  ): Projectile {
     const dirX = Math.sin(aim)
     const dirZ = Math.cos(aim)
-    const spawnDistance = PLAYER_RADIUS + this.spec.radius + PROJECTILE_SPAWN_CLEARANCE
+    const spawnDistance = PLAYER_RADIUS + spec.radius + PROJECTILE_SPAWN_CLEARANCE
     return new Projectile(
       ownerId,
       x + dirX * spawnDistance,
       z + dirZ * spawnDistance,
       dirX,
       dirZ,
-      this.spec,
+      spec,
+      arrow,
     )
   }
 }

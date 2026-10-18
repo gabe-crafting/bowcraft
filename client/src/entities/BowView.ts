@@ -1,7 +1,7 @@
-import type { WeaponKind } from '@bounty/shared'
+import { arrowLook, type ShotArrow, type WeaponKind } from '@bounty/shared'
 import { BoxGeometry, Group, Mesh, MeshStandardMaterial, Vector3 } from 'three'
 import { disposeObject } from '../scene/dispose'
-import { makeArrow } from './Arrow'
+import { makeArrow, makeFlareArrow } from './Arrow'
 
 const LONG_WOOD = 0x6b3f24
 const SHORT_WOOD = 0xc49255
@@ -38,6 +38,8 @@ export class BowView {
   private readonly height: number
   private readonly bend: number
   private readonly drawDistance: number
+  private readonly hasArrow: boolean
+  private nockKind: ShotArrow = 'normal'
   private shotStarted = -1
 
   constructor(kind: WeaponKind, showArrow = true) {
@@ -45,6 +47,7 @@ export class BowView {
     this.height = shape.height
     this.bend = shape.bend
     this.drawDistance = shape.draw
+    this.hasArrow = showArrow
 
     const wood = new MeshStandardMaterial({
       color: shape.wood,
@@ -85,6 +88,20 @@ export class BowView {
     }
     this.group.add(this.nock)
     this.poseString(0)
+  }
+
+  setArrow(arrow: ShotArrow): void {
+    if (!this.hasArrow || this.nockKind === arrow) return
+    this.nockKind = arrow
+    for (const child of [...this.nock.children]) {
+      this.nock.remove(child)
+      disposeObject(child)
+    }
+    const arrowLength = this.height * 0.42
+    const mesh =
+      arrow === 'flare' ? makeFlareArrow(arrowLength) : makeArrow(arrowLength, arrowLook(arrow))
+    mesh.position.z = arrowLength / 2
+    this.nock.add(mesh)
   }
 
   loose(now: number): void {

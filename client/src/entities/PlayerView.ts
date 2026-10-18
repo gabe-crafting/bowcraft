@@ -1,4 +1,4 @@
-import type { WeaponKind } from '@bounty/shared'
+import type { ShotArrow, WeaponKind } from '@bounty/shared'
 import {
   BoxGeometry,
   Color,
@@ -28,6 +28,7 @@ export class PlayerView {
   readonly group = new Group()
   private bow: BowView | null = null
   private bowKind: WeaponKind | null = null
+  private nocked: ShotArrow = 'normal'
   private readonly bowArm: Mesh
   private readonly drawArm: Mesh
   private readonly leftLeg: Group
@@ -92,6 +93,20 @@ export class PlayerView {
     this.group.visible = visible
   }
 
+  /** A faint body for the hunter who is hidden. Other hunters are not sent this view. */
+  setConcealed(concealed: boolean): void {
+    this.group.traverse((object) => {
+      if (!(object instanceof Mesh)) return
+      const materials = Array.isArray(object.material) ? object.material : [object.material]
+      for (const material of materials) {
+        if (material.transparent !== concealed) material.needsUpdate = true
+        material.transparent = concealed
+        material.opacity = concealed ? 0.28 : 1
+        material.depthWrite = !concealed
+      }
+    })
+  }
+
   setBow(kind: WeaponKind | null): void {
     if (this.bowKind === kind) return
     this.bowKind = kind
@@ -104,9 +119,15 @@ export class PlayerView {
       return
     }
     this.bow = new BowView(kind)
+    this.bow.setArrow(this.nocked)
     this.bow.group.position.copy(BOW_POSITION)
     this.group.add(this.bow.group)
     this.poseArms()
+  }
+
+  setArrow(arrow: ShotArrow): void {
+    this.nocked = arrow
+    this.bow?.setArrow(arrow)
   }
 
   loose(now: number): void {

@@ -1,9 +1,13 @@
+export { ARROW_KINDS, ARROWS, NORMAL_ARROW, arrowLook, arrowShot, isArrowKind, isShotArrow, type ArrowKind, type ArrowLook, type ArrowProfile, type QuiverCounts, type ShotArrow } from './arrow'
 export {
   AMBIENT_COLOR,
   AMBIENT_INTENSITY,
   ARENA_SIZE,
+  ARROW_STACK_SIZE,
   BUSH_COLOR,
   BUSH_DARK,
+  BUSH_HIDE_RADIUS,
+  BUSH_REVEAL_MS,
   CAMERA_DISTANCE,
   CAMERA_FAR,
   CAMERA_FOV,
@@ -13,7 +17,15 @@ export {
   COVER_WALL_COLOR,
   COVER_WALL_HEIGHT,
   DEFAULT_USERNAME,
+  DUMMY_HP,
+  DUMMY_RADIUS,
+  EXPLOSION_ANIM_MS,
   EXPLOSION_RADIUS,
+  FLARE_DAMAGE_SCALE,
+  FLARE_LIGHT_FALLOFF,
+  FLARE_LIGHT_RADIUS,
+  FLARE_RANGE_SCALE,
+  FLARE_SPEED_SCALE,
   FOG_COLOR,
   FOG_OPACITY,
   GROUND_COLOR,
@@ -67,14 +79,27 @@ export {
   WALL_HEIGHT,
   WALL_THICKNESS,
 } from './constants'
-export { BUSHES, TREES, WALLS, wallBounds, type BushSpot, type TreeSpot, type WallBlock } from './map'
-export { isInSight } from './vision'
+export {
+  BUSHES,
+  TREES,
+  WALLS,
+  bushRadius,
+  isInBush,
+  wallBounds,
+  type BushSpot,
+  type TreeSpot,
+  type WallBlock,
+} from './map'
+export { isInLight, isInSight } from './vision'
 export {
   parseClientMessage,
   parseServerMessage,
   type ActionMessage,
   type ArenaFullMessage,
+  type ArrowStackSnapshot,
   type ClientMessage,
+  type DummySnapshot,
+  type ExplosionSnapshot,
   type InputMessage,
   type JoinMessage,
   type PlayerSnapshot,
@@ -85,4 +110,4 @@ export {
   type WeaponSnapshot,
   type WelcomeMessage,
 } from './messages'
-export { BOWS, isWeaponKind, type ProjectileSpec, type WeaponKind } from './weapon'
+export { BOWS, BOW_NAMES, isWeaponKind, type ProjectileSpec, type WeaponKind } from './weapon'

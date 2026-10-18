@@ -1,3 +1,5 @@
+import { BUSH_HIDE_RADIUS } from './constants'
+
 /** Axis-aligned stone wall. `x` and `z` are the center. `width` runs along X, `depth` along Z. */
 export interface WallBlock {
   x: number
@@ -12,7 +14,7 @@ export interface TreeSpot {
   z: number
 }
 
-/** Soft thicket. Hunters and arrows pass through it. */
+/** Soft thicket. Hunters and arrows pass through it. `scale` multiplies BUSH_HIDE_RADIUS. */
 export interface BushSpot {
   x: number
   z: number
@@ -45,29 +47,42 @@ export const TREES: readonly TreeSpot[] = [
 ]
 
 export const BUSHES: readonly BushSpot[] = [
-  { x: -15.5, z: -15.2, scale: 0.95 },
-  { x: -13.6, z: -16.2, scale: 0.72 },
-  { x: 15.5, z: 15.2, scale: 0.95 },
-  { x: 13.6, z: 16.2, scale: 0.72 },
-  { x: -7.4, z: -1.1, scale: 1 },
-  { x: -3.6, z: -4.5, scale: 0.82 },
-  { x: -10.2, z: 2.4, scale: 0.9 },
-  { x: 1.6, z: 1.2, scale: 1.05 },
-  { x: 4.8, z: -2.1, scale: 0.78 },
-  { x: 8.6, z: 4.6, scale: 0.95 },
-  { x: 6.8, z: -8.8, scale: 0.88 },
-  { x: -6.2, z: -9.6, scale: 1.08 },
-  { x: -2.4, z: 9.4, scale: 0.8 },
-  { x: 2.6, z: 10.2, scale: 0.92 },
-  { x: 12.2, z: 3.6, scale: 0.84 },
-  { x: -12.4, z: 3.4, scale: 1 },
-  { x: 5.4, z: -12.4, scale: 0.76 },
-  { x: -1.6, z: -11.6, scale: 1.02 },
-  { x: 9.4, z: -1.4, scale: 0.8 },
-  { x: -4.2, z: 4.2, scale: 0.86 },
-  { x: 0.4, z: -5.2, scale: 0.74 },
-  { x: -11.4, z: -4.6, scale: 0.9 },
+  { x: -15.6, z: -15.4, scale: 1.05 },
+  { x: -12.4, z: -16.4, scale: 1.05 },
+  { x: 15.6, z: 15.4, scale: 1.05 },
+  { x: 12.4, z: 16.4, scale: 1.05 },
+  { x: -7.4, z: -1.1, scale: 1.45 },
+  { x: -3.6, z: -4.5, scale: 1.3 },
+  { x: -10.2, z: 2.4, scale: 1.35 },
+  { x: 1.6, z: 1.2, scale: 1.5 },
+  { x: 4.8, z: -2.1, scale: 1.25 },
+  { x: 8.6, z: 4.6, scale: 1.4 },
+  { x: 6.8, z: -8.8, scale: 1.3 },
+  { x: -6.2, z: -9.6, scale: 1.5 },
+  { x: -2.4, z: 9.4, scale: 1.25 },
+  { x: 2.6, z: 10.2, scale: 1.35 },
+  { x: 12.2, z: 3.6, scale: 1.3 },
+  { x: -12.4, z: 3.4, scale: 1.45 },
+  { x: 5.4, z: -12.4, scale: 1.2 },
+  { x: -1.6, z: -11.6, scale: 1.45 },
+  { x: 9.4, z: -1.4, scale: 1.25 },
+  { x: -4.2, z: 4.2, scale: 1.3 },
+  { x: 0.4, z: -5.2, scale: 1.2 },
+  { x: -11.4, z: -4.6, scale: 1.35 },
 ]
+
+export function bushRadius(bush: BushSpot): number {
+  return BUSH_HIDE_RADIUS * bush.scale
+}
+
+export function isInBush(x: number, z: number): boolean {
+  return BUSHES.some((bush) => {
+    const radius = bushRadius(bush)
+    const dx = x - bush.x
+    const dz = z - bush.z
+    return dx * dx + dz * dz <= radius * radius
+  })
+}
 
 export function wallBounds(wall: WallBlock, padding = 0): {
   minX: number

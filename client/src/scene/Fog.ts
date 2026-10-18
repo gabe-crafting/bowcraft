@@ -1,4 +1,6 @@
 import {
+  FLARE_LIGHT_FALLOFF,
+  FLARE_LIGHT_RADIUS,
   FOG_COLOR,
   FOG_OPACITY,
   TREES,
@@ -31,6 +33,7 @@ import {
 
 const MAX_WALLS = 16
 const MAX_TREES = 16
+const MAX_FLARES = 8
 const SURFACE_GAP = 0.15
 
 const vertexShader = `
@@ -62,6 +65,10 @@ const fragmentShader = `
   uniform float uWallCount;
   uniform vec3 uTrees[${MAX_TREES}];
   uniform float uTreeCount;
+  uniform vec2 uFlares[${MAX_FLARES}];
+  uniform float uFlareCount;
+  uniform float uFlareRadius;
+  uniform float uFlareFalloff;
 
   bool hitsWall(vec2 from, vec2 to, vec4 box) {
     vec2 delta = to - from;
@@ -103,20 +110,34 @@ const fragmentShader = `
     return t >= 0.0 && t <= 1.0;
   }
 
-  bool blocked(vec2 point) {
-    vec2 delta = point - uOrigin;
+  bool blockedFrom(vec2 origin, vec2 point) {
+    vec2 delta = point - origin;
     float distance = length(delta);
     if (distance <= ${SURFACE_GAP.toFixed(2)}) return false;
-    vec2 end = uOrigin + delta * ((distance - ${SURFACE_GAP.toFixed(2)}) / distance);
+    vec2 end = origin + delta * ((distance - ${SURFACE_GAP.toFixed(2)}) / distance);
     for (int index = 0; index < ${MAX_WALLS}; index++) {
       if (float(index) >= uWallCount) break;
-      if (hitsWall(uOrigin, end, uWalls[index])) return true;
+      if (hitsWall(origin, end, uWalls[index])) return true;
     }
     for (int index = 0; index < ${MAX_TREES}; index++) {
       if (float(index) >= uTreeCount) break;
-      if (hitsTrunk(uOrigin, end, uTrees[index])) return true;
+      if (hitsTrunk(origin, end, uTrees[index])) return true;
     }
     return false;
+  }
+
+  float flareOpen(vec2 point) {
+    float open = 0.0;
+    for (int index = 0; index < ${MAX_FLARES}; index++) {
+      if (float(index) >= uFlareCount) break;
+      vec2 origin = uFlares[index];
+      float distance = length(point - origin);
+      float lit = 1.0 - smoothstep(uFlareRadius, uFlareRadius + uFlareFalloff, distance);
+      if (lit <= open) continue;
+      if (blockedFrom(origin, point)) continue;
+      open = lit;
+    }
+    return open;
   }
 
   float visionFog(vec2 point) {
@@ -131,7 +152,8 @@ const fragmentShader = `
     float inFront = smoothstep(edge, clear, facing);
     float inRange = 1.0 - smoothstep(uRadius, uRadius + uFalloff, distance);
     float open = inFront * inRange;
-    if (blocked(point)) open = 0.0;
+    if (blockedFrom(uOrigin, point)) open = 0.0;
+    open = max(open, flareOpen(point));
     open = max(open, selfLight);
     return 1.0 - open;
   }
@@ -201,6 +223,10 @@ export class Fog {
         uWallCount: { value: WALLS.length },
         uTrees: { value: trees },
         uTreeCount: { value: TREES.length },
+        uFlares: { value: Array.from({ length: MAX_FLARES }, () => new Vector2()) },
+        uFlareCount: { value: 0 },
+        uFlareRadius: { value: FLARE_LIGHT_RADIUS },
+        uFlareFalloff: { value: FLARE_LIGHT_FALLOFF },
       },
       vertexShader,
       fragmentShader,
@@ -213,18 +239,41 @@ export class Fog {
     this.target.setSize(Math.max(1, width), Math.max(1, height))
   }
 
-  follow(x: number, z: number, aim: number, camera: Camera): void {
+  follow(
+    x: number,
+    z: number,
+    aim: number,
+    camera: Camera,
+    flares: readonly { x: number; z: number }[],
+  ): void {
     this.revealed = true
     const origin = this.material.uniforms.uOrigin?.value
     if (origin instanceof Vector2) origin.set(x, z)
     const forward = this.material.uniforms.uForward?.value
     if (forward instanceof Vector2) forward.set(Math.sin(aim), Math.cos(aim))
+    this.placeFlares(x, z, flares)
 
     camera.updateMatrixWorld()
     const inverseProjection = this.material.uniforms.uInverseProjection?.value
     const inverseView = this.material.uniforms.uInverseView?.value
     if (inverseProjection instanceof Matrix4) inverseProjection.copy(camera.projectionMatrixInverse)
     if (inverseView instanceof Matrix4) inverseView.copy(camera.matrixWorld)
+  }
+
+  private placeFlares(x: number, z: number, flares: readonly { x: number; z: number }[]): void {
+    const slots = this.material.uniforms.uFlares?.value
+    const count = this.material.uniforms.uFlareCount
+    if (!Array.isArray(slots) || !count) return
+
+    const nearest = [...flares]
+      .sort((a, b) => (a.x - x) ** 2 + (a.z - z) ** 2 - ((b.x - x) ** 2 + (b.z - z) ** 2))
+      .slice(0, MAX_FLARES)
+    count.value = nearest.length
+    for (let index = 0; index < MAX_FLARES; index += 1) {
+      const slot = slots[index]
+      const flare = nearest[index]
+      if (slot instanceof Vector2) slot.set(flare?.x ?? 0, flare?.z ?? 0)
+    }
   }
 
   render(renderer: WebGLRenderer, scene: Scene, camera: Camera): void {

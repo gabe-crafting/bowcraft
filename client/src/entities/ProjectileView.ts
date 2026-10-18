@@ -1,15 +1,18 @@
-import { PROJECTILE_Y } from '@bounty/shared'
+import { arrowLook, PROJECTILE_Y, type ShotArrow } from '@bounty/shared'
 import { Group } from 'three'
 import { disposeObject } from '../scene/dispose'
-import { makeArrow } from './Arrow'
+import { makeArrow, makeFlareArrow } from './Arrow'
 
 const ARROW_LENGTH = 0.74
+const FLARE_LENGTH = 0.46
 
 export class ProjectileView {
   readonly group = new Group()
 
-  constructor() {
-    this.group.add(makeArrow(ARROW_LENGTH))
+  constructor(arrow: ShotArrow) {
+    const mesh =
+      arrow === 'flare' ? makeFlareArrow(FLARE_LENGTH) : makeArrow(ARROW_LENGTH, arrowLook(arrow))
+    this.group.add(mesh)
     this.group.position.y = PROJECTILE_Y
   }
 
