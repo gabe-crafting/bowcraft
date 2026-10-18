@@ -96,12 +96,22 @@ classDiagram
   class Projectile {
     +string id
     +string ownerId
-    +number dirX
-    +number dirZ
-    +ProjectileSpec spec
     +number x
+    +number y
     +number z
+    +number vx
+    +number vy
+    +number vz
+    +number bendX
+    +number bendZ
+    +boolean turned
+    +number landX
+    +number landZ
     +number traveled
+    +number age
+    +boolean grounded
+    +number groundedAt
+    +ProjectileSpec spec
     +string arrow
   }
   class ArrowStack {
@@ -120,6 +130,7 @@ classDiagram
   }
   class Explosion {
     +string id
+    +string ownerId
     +number x
     +number z
     +number radius
@@ -135,6 +146,7 @@ classDiagram
     +boolean ricochets
     +number explosionRadius
     +number fireCooldownMs
+    +string trajectory
   }
   Game *-- Player
   Game *-- Projectile
@@ -147,7 +159,7 @@ classDiagram
   Projectile --> ProjectileSpec
 ```
 
-Held weapons stay on the player. `groundWeapons` is only the ones lying in the arena. `arrowStacks` are piles of ricochet, explosion, bodkin, and flare arrows. Walking over a pile adds them to `quiver`. `selected` is `normal` for the unlimited arrow, or one of those four. Ricochet arrows bounce off walls, trunks, and the arena edge. Explosion arrows burst on those surfaces, on hunters, and on dummies, and leave a short `Explosion`. Bodkin arrows pass through walls and trunks. Flare arrows fly slowly and light a full circle, blocked by walls and trunks, until they land. `Dummy` targets stand along the walls and across the arena. They take arrow and blast damage and stay fallen at 0 hp. `Weapon` creates each `Projectile` from the bow and the selected arrow. The bow still sets the time between shots.
+Held weapons stay on the player. `groundWeapons` is only the ones lying in the arena. `arrowStacks` are piles of ricochet, explosion, bodkin, and flare arrows. Walking over a pile adds them to `quiver`. `selected` is `normal` for the unlimited arrow, or one of those four. Ricochet arrows bounce off walls, trunks, and the arena edge. Explosion arrows burst on the ground, on those surfaces, on hunters, and on dummies, and leave a short `Explosion`. The shooter keeps seeing that arrow and its blast after they leave the view cone. Bodkin arrows pass through walls and trunks. Flare arrows fly slowly and light a full circle, blocked by walls and trunks, until they land. `Dummy` targets stand along the walls and across the arena. They take arrow and blast damage and stay fallen at 0 hp. `Weapon` creates each `Projectile` from the bow and the selected arrow. A shortbow flies flat along the facing and drops. A longbow lofts onto the clicked ground and can pass over low cover. A recurve does the same with a longer reach, and bends once to get around a wall. The bow still sets the time between shots.
 
 ## Client
 
@@ -331,6 +343,8 @@ classDiagram
     +boolean left
     +boolean right
     +number aim
+    +number aimX
+    +number aimZ
     +boolean shoot
     +number slot
   }
@@ -368,8 +382,10 @@ classDiagram
     +string id
     +string ownerId
     +number x
+    +number y
     +number z
     +number dirX
+    +number dirY
     +number dirZ
     +string arrow
   }
@@ -389,6 +405,7 @@ classDiagram
   }
   class ExplosionSnapshot {
     +string id
+    +string ownerId
     +number x
     +number z
     +number radius

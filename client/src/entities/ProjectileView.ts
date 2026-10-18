@@ -13,12 +13,15 @@ export class ProjectileView {
     const mesh =
       arrow === 'flare' ? makeFlareArrow(FLARE_LENGTH) : makeArrow(ARROW_LENGTH, arrowLook(arrow))
     this.group.add(mesh)
+    this.group.rotation.order = 'YXZ'
     this.group.position.y = PROJECTILE_Y
   }
 
-  setPose(x: number, z: number, dirX: number, dirZ: number): void {
-    this.group.position.set(x, PROJECTILE_Y, z)
+  setPose(x: number, y: number, z: number, dirX: number, dirY: number, dirZ: number): void {
+    this.group.position.set(x, Math.max(y, 0.06), z)
+    const horizontal = Math.hypot(dirX, dirZ)
     this.group.rotation.y = Math.atan2(dirX, dirZ)
+    this.group.rotation.x = -Math.atan2(dirY, horizontal)
   }
 
   dispose(): void {

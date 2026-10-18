@@ -8,6 +8,7 @@ import {
   TREE_LEAF_COLOR,
   TREE_LEAF_DARK,
   TREE_TRUNK_COLOR,
+  TREE_TRUNK_HEIGHT,
   TREE_TRUNK_RADIUS,
   TREES,
   WALLS,
@@ -22,7 +23,7 @@ import {
 } from 'three'
 import { disposeObject } from './dispose'
 
-const TRUNK_HEIGHT = 1.15
+const TRUNK_HEIGHT = TREE_TRUNK_HEIGHT
 
 export class Scenery {
   readonly group = new Group()

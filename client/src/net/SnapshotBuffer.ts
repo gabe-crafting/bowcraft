@@ -75,12 +75,21 @@ function blend(before: StateMessage, after: StateMessage, alpha: number): Render
   const projectiles = after.projectiles.map((projectile) => {
     const prior = previousProjectiles.get(projectile.id)
     if (!prior) return projectile
-    const turned = prior.dirX * projectile.dirX + prior.dirZ * projectile.dirZ < 0.35
+    const priorHorizontal = Math.hypot(prior.dirX, prior.dirZ) || 1
+    const nextHorizontal = Math.hypot(projectile.dirX, projectile.dirZ) || 1
+    const turned =
+      (prior.dirX / priorHorizontal) * (projectile.dirX / nextHorizontal) +
+        (prior.dirZ / priorHorizontal) * (projectile.dirZ / nextHorizontal) <
+      0.35
     if (turned) return projectile
     return {
       ...projectile,
       x: prior.x + (projectile.x - prior.x) * alpha,
+      y: prior.y + (projectile.y - prior.y) * alpha,
       z: prior.z + (projectile.z - prior.z) * alpha,
+      dirX: prior.dirX + (projectile.dirX - prior.dirX) * alpha,
+      dirY: prior.dirY + (projectile.dirY - prior.dirY) * alpha,
+      dirZ: prior.dirZ + (projectile.dirZ - prior.dirZ) * alpha,
     }
   })
 

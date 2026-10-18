@@ -1,6 +1,10 @@
 import {
+  ARROW_GRAVITY,
   ARROW_KINDS,
+  ARROW_REST_MS,
   ARROW_STACK_SIZE,
+  COVER_PASS_HEIGHT,
+  HUNTER_HIT_HEIGHT,
   arrowShot,
   BUSH_REVEAL_MS,
   DUMMY_RADIUS,
@@ -33,6 +37,7 @@ import {
   type WeaponKind,
   type WeaponSnapshot,
 } from '@bounty/shared'
+import { timeToGround } from './ballistics'
 import { ArrowStack } from './ArrowStack'
 import { Dummy } from './Dummy'
 import { Explosion } from './Explosion'
@@ -152,15 +157,20 @@ export class Game {
         ],
         cooldownMs: this.cooldownMs(player),
       })),
-      projectiles: this.projectiles.map((projectile) => ({
-        id: projectile.id,
-        ownerId: projectile.ownerId,
-        x: projectile.x,
-        z: projectile.z,
-        dirX: projectile.dirX,
-        dirZ: projectile.dirZ,
-        arrow: projectile.arrow,
-      })),
+      projectiles: this.projectiles.map((projectile) => {
+        const heading = projectile.heading()
+        return {
+          id: projectile.id,
+          ownerId: projectile.ownerId,
+          x: projectile.x,
+          y: projectile.y,
+          z: projectile.z,
+          dirX: heading.dirX,
+          dirY: heading.dirY,
+          dirZ: heading.dirZ,
+          arrow: projectile.arrow,
+        }
+      }),
       weapons: this.weaponSnapshots(),
       stacks: this.stackSnapshots(),
       dummies: this.dummySnapshots(),
@@ -182,13 +192,16 @@ export class Game {
           player.id === viewerId ||
           (!player.hidden && this.seen(viewer, player.x, player.z, 0.4)),
       ),
-      projectiles: state.projectiles.filter((projectile) =>
-        this.seen(viewer, projectile.x, projectile.z, 0.15),
+      projectiles: state.projectiles.filter(
+        (projectile) =>
+          projectile.ownerId === viewerId || this.seen(viewer, projectile.x, projectile.z, 0.15),
       ),
       weapons: state.weapons.filter((weapon) => this.seen(viewer, weapon.x, weapon.z, 0.3)),
       stacks: state.stacks.filter((stack) => this.seen(viewer, stack.x, stack.z, 0.3)),
       dummies: state.dummies.filter((dummy) => this.seen(viewer, dummy.x, dummy.z, 0.35)),
-      explosions: state.explosions.filter((blast) => this.seen(viewer, blast.x, blast.z, 0.4)),
+      explosions: state.explosions.filter(
+        (blast) => blast.ownerId === viewerId || this.seen(viewer, blast.x, blast.z, blast.radius),
+      ),
     }
   }
 
@@ -254,7 +267,7 @@ export class Game {
     let index = 0
     for (const x of scatterLine()) {
       for (const z of scatterLine()) {
-        const kind: WeaponKind = index % 2 === 0 ? 'longbow' : 'shortbow'
+        const kind: WeaponKind = index % 3 === 0 ? 'longbow' : index % 3 === 1 ? 'shortbow' : 'recurve'
         this.groundWeapons.push(new Weapon(kind, x, z))
         index += 1
       }
@@ -264,10 +277,12 @@ export class Game {
       [-13.2, -11.2, 'shortbow'],
       [-10.5, -12.5, 'shortbow'],
       [-12.2, -10.2, 'longbow'],
+      [-9.4, -11.6, 'recurve'],
       [11.5, 13.2, 'shortbow'],
       [13.2, 11.2, 'longbow'],
       [10.5, 12.5, 'longbow'],
       [12.2, 10.2, 'shortbow'],
+      [11.8, 15.0, 'recurve'],
     ]
     for (const [x, z, kind] of near) this.groundWeapons.push(new Weapon(kind, x, z))
   }
@@ -335,6 +350,8 @@ export class Game {
         player.x,
         player.z,
         player.aim,
+        player.input.aimX,
+        player.input.aimZ,
         arrowShot(weapon.spec, arrow),
         arrow,
       ),
@@ -449,99 +466,170 @@ export class Game {
 
   /** Returns true while the arrow is still in the air. */
   private fly(projectile: Projectile): boolean {
-    const spec = projectile.spec
-    if (projectile.traveled >= spec.maxRange) return false
-
-    let remaining = Math.min(spec.speed * TICK_SECONDS, spec.maxRange - projectile.traveled)
+    if (projectile.grounded) {
+      projectile.age += TICK_SECONDS
+      return projectile.age - projectile.groundedAt < ARROW_REST_MS / 1000
+    }
+    if (projectile.age > 8) return false
+    let remaining = TICK_SECONDS
     for (let bounce = 0; bounce < 5 && remaining > 1e-4; bounce += 1) {
-      const x0 = projectile.x
-      const z0 = projectile.z
-      const x1 = x0 + projectile.dirX * remaining
-      const z1 = z0 + projectile.dirZ * remaining
-      const struck = this.findHit(
-        projectile.ownerId,
-        x0,
-        z0,
-        x1,
-        z1,
-        PLAYER_RADIUS + spec.radius,
-      )
-      const dummyHit = this.findDummy(x0, z0, x1, z1, DUMMY_RADIUS + spec.radius)
-      const cover = spec.penetrates ? null : coverHit(x0, z0, x1, z1, spec.radius)
-      const border = spec.penetrates ? null : arenaBorderHit(x0, z0, x1, z1, spec.radius)
-
-      let stopT = 1
-      let mode: 'clear' | 'player' | 'dummy' | 'cover' | 'border' = 'clear'
-      let normalX = 0
-      let normalZ = 0
-      if (struck && struck.t < stopT) {
-        stopT = struck.t
-        mode = 'player'
+      const ground = timeToGround(projectile.y, projectile.vy)
+      const step = ground < remaining ? ground : remaining
+      const bendX = projectile.bendX
+      const bendZ = projectile.bendZ
+      if (bendX !== null && bendZ !== null && !projectile.turned) {
+        const reach = Math.hypot(bendX - projectile.x, bendZ - projectile.z)
+        const horizontal = Math.hypot(projectile.vx, projectile.vz)
+        const bendTime = horizontal > 1e-5 ? reach / horizontal : Number.POSITIVE_INFINITY
+        if (bendTime < step) {
+          const bent = this.integrate(projectile, bendTime)
+          if (bent.kind === 'stopped') return false
+          if (bent.kind === 'bounced') {
+            remaining -= bent.used
+            continue
+          }
+          if (projectile.grounded) return true
+          this.redirect(projectile)
+          remaining -= bent.used
+          continue
+        }
       }
-      if (dummyHit && dummyHit.t < stopT) {
-        stopT = dummyHit.t
-        mode = 'dummy'
-      }
-      if (cover && cover.t <= stopT) {
-        stopT = cover.t
-        mode = 'cover'
-        normalX = cover.nx
-        normalZ = cover.nz
-      }
-      if (border && border.t <= stopT) {
-        stopT = border.t
-        mode = 'border'
-        normalX = border.nx
-        normalZ = border.nz
-      }
-
-      if (mode === 'clear') {
-        projectile.x = x1
-        projectile.z = z1
-        projectile.traveled += remaining
-        return projectile.traveled < spec.maxRange
-      }
-
-      const traveled = remaining * stopT
-      const hitX = x0 + (x1 - x0) * stopT
-      const hitZ = z0 + (z1 - z0) * stopT
-      projectile.traveled += traveled
-
-      if (mode === 'player' && struck) {
-        if (spec.explodes) this.explode(projectile, struck.player.x, struck.player.z)
-        else this.applyDamage(struck.player, spec.damage)
-        return false
-      }
-
-      if (mode === 'dummy' && dummyHit) {
-        if (spec.explodes) this.explode(projectile, dummyHit.dummy.x, dummyHit.dummy.z)
-        else this.hurtDummy(dummyHit.dummy, spec.damage)
-        return false
-      }
-
-      if (spec.explodes) {
-        this.explode(projectile, hitX, hitZ)
-        return false
-      }
-
-      if (spec.ricochets) {
-        const reflected = reflect(projectile.dirX, projectile.dirZ, normalX, normalZ)
-        const length = Math.hypot(reflected.x, reflected.z)
-        if (length < 1e-6 || traveled < 1e-4) return false
-        projectile.dirX = reflected.x / length
-        projectile.dirZ = reflected.z / length
-        projectile.x = hitX + normalX * 0.04
-        projectile.z = hitZ + normalZ * 0.04
-        remaining -= traveled
+      const result = this.integrate(projectile, step)
+      if (result.kind === 'stopped') return false
+      if (result.kind === 'bounced') {
+        remaining -= result.used
         continue
       }
+      if (projectile.grounded) return true
+      return true
+    }
+    return projectile.y > 0.02
+  }
 
-      projectile.x = hitX
-      projectile.z = hitZ
-      return false
+  /** Lays the arrow on the ground and keeps its heading for the rest pose. */
+  private layDown(projectile: Projectile): void {
+    projectile.y = 0
+    projectile.vy = 0
+    const horizontal = Math.hypot(projectile.vx, projectile.vz)
+    if (horizontal > 1e-6) {
+      projectile.vx /= horizontal
+      projectile.vz /= horizontal
+    }
+    projectile.grounded = true
+    projectile.groundedAt = projectile.age
+  }
+
+  /** Points the rest of a hooked shot at the landing spot. Happens once. */
+  private redirect(projectile: Projectile): void {
+    projectile.turned = true
+    projectile.bendX = null
+    projectile.bendZ = null
+    const dx = projectile.landX - projectile.x
+    const dz = projectile.landZ - projectile.z
+    const distance = Math.hypot(dx, dz)
+    const left = Math.max(timeToGround(projectile.y, projectile.vy), 1e-3)
+    const speed = distance / left
+    projectile.vx = distance > 1e-6 ? (dx / distance) * speed : 0
+    projectile.vz = distance > 1e-6 ? (dz / distance) * speed : 0
+  }
+
+  private integrate(projectile: Projectile, dt: number): { kind: 'clear' | 'stopped' | 'bounced'; used: number } {
+    if (dt <= 1e-5) return { kind: 'clear', used: 0 }
+    const spec = projectile.spec
+    const x0 = projectile.x
+    const z0 = projectile.z
+    const y0 = projectile.y
+    const x1 = x0 + projectile.vx * dt
+    const z1 = z0 + projectile.vz * dt
+    const y1 = y0 + projectile.vy * dt - 0.5 * ARROW_GRAVITY * dt * dt
+    const yAt = (t: number) => y0 + (y1 - y0) * t
+    const struck = this.findHit(projectile.ownerId, x0, z0, x1, z1, PLAYER_RADIUS + spec.radius)
+    const dummyHit = this.findDummy(x0, z0, x1, z1, DUMMY_RADIUS + spec.radius)
+    const cover = spec.penetrates ? null : coverHit(x0, z0, x1, z1, spec.radius)
+    const border = spec.penetrates ? null : arenaBorderHit(x0, z0, x1, z1, spec.radius)
+
+    let stopT = 1
+    let mode: 'clear' | 'player' | 'dummy' | 'cover' | 'border' = 'clear'
+    let normalX = 0
+    let normalZ = 0
+    if (struck && yAt(struck.t) <= HUNTER_HIT_HEIGHT && struck.t < stopT) {
+      stopT = struck.t
+      mode = 'player'
+    }
+    if (dummyHit && yAt(dummyHit.t) <= HUNTER_HIT_HEIGHT && dummyHit.t < stopT) {
+      stopT = dummyHit.t
+      mode = 'dummy'
+    }
+    if (cover && yAt(cover.t) <= COVER_PASS_HEIGHT && cover.t <= stopT) {
+      stopT = cover.t
+      mode = 'cover'
+      normalX = cover.nx
+      normalZ = cover.nz
+    }
+    if (border && yAt(border.t) <= COVER_PASS_HEIGHT && border.t <= stopT) {
+      stopT = border.t
+      mode = 'border'
+      normalX = border.nx
+      normalZ = border.nz
     }
 
-    return projectile.traveled < spec.maxRange
+    if (mode === 'clear') {
+      projectile.x = x1
+      projectile.z = z1
+      projectile.y = Math.max(0, y1)
+      projectile.vy -= ARROW_GRAVITY * dt
+      projectile.traveled += Math.hypot(x1 - x0, z1 - z0)
+      projectile.age += dt
+      if (projectile.y <= 0.02) {
+        projectile.y = 0
+        if (spec.explodes) {
+          this.explode(projectile, projectile.x, projectile.z)
+          return { kind: 'stopped', used: dt }
+        }
+        this.layDown(projectile)
+      }
+      return { kind: 'clear', used: dt }
+    }
+
+    const used = dt * stopT
+    const hitX = x0 + (x1 - x0) * stopT
+    const hitZ = z0 + (z1 - z0) * stopT
+    projectile.x = hitX
+    projectile.z = hitZ
+    projectile.y = Math.max(0, yAt(stopT))
+    projectile.vy -= ARROW_GRAVITY * used
+    projectile.traveled += Math.hypot(hitX - x0, hitZ - z0)
+    projectile.age += used
+
+    if (mode === 'player' && struck) {
+      if (spec.explodes) this.explode(projectile, struck.player.x, struck.player.z)
+      else this.applyDamage(struck.player, spec.damage)
+      return { kind: 'stopped', used }
+    }
+    if (mode === 'dummy' && dummyHit) {
+      if (spec.explodes) this.explode(projectile, dummyHit.dummy.x, dummyHit.dummy.z)
+      else this.hurtDummy(dummyHit.dummy, spec.damage)
+      return { kind: 'stopped', used }
+    }
+    if (spec.explodes) {
+      this.explode(projectile, hitX, hitZ)
+      return { kind: 'stopped', used }
+    }
+    if (spec.ricochets && used > 1e-4) {
+      const horizontal = Math.hypot(projectile.vx, projectile.vz)
+      const reflected = reflect(projectile.vx, projectile.vz, normalX, normalZ)
+      const length = Math.hypot(reflected.x, reflected.z)
+      if (length < 1e-6) return { kind: 'stopped', used }
+      projectile.vx = (reflected.x / length) * horizontal
+      projectile.vz = (reflected.z / length) * horizontal
+      projectile.x = hitX + normalX * 0.04
+      projectile.z = hitZ + normalZ * 0.04
+      projectile.bendX = null
+      projectile.bendZ = null
+      projectile.turned = true
+      return { kind: 'bounced', used }
+    }
+    return { kind: 'stopped', used }
   }
 
   private settle(player: Player): void {
@@ -575,7 +663,9 @@ export class Game {
   }
 
   private explode(projectile: Projectile, x: number, z: number): void {
-    this.explosions.push(new Explosion(x, z, projectile.spec.explosionRadius, this.elapsedMs))
+    this.explosions.push(
+      new Explosion(projectile.ownerId, x, z, projectile.spec.explosionRadius, this.elapsedMs),
+    )
     const playerReach = projectile.spec.explosionRadius + PLAYER_RADIUS
     const playerReachSquared = playerReach * playerReach
     for (const player of this.players.values()) {
@@ -642,6 +732,7 @@ export class Game {
   private explosionSnapshots(): ExplosionSnapshot[] {
     return this.explosions.map((blast) => ({
       id: blast.id,
+      ownerId: blast.ownerId,
       x: blast.x,
       z: blast.z,
       radius: blast.radius,

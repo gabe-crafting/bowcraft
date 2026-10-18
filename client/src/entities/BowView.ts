@@ -5,6 +5,7 @@ import { makeArrow, makeFlareArrow } from './Arrow'
 
 const LONG_WOOD = 0x6b3f24
 const SHORT_WOOD = 0xc49255
+const RECURVE_WOOD = 0x8a3b2a
 const GRIP_COLOR = 0x3a2a22
 const STRING_COLOR = 0xf4f0e8
 
@@ -28,6 +29,7 @@ interface BowShape {
 const SHAPES: Record<WeaponKind, BowShape> = {
   longbow: { height: 1.2, bend: 0.22, segments: 7, thickness: 0.065, draw: 0.42, wood: LONG_WOOD },
   shortbow: { height: 0.78, bend: 0.14, segments: 5, thickness: 0.06, draw: 0.28, wood: SHORT_WOOD },
+  recurve: { height: 1.02, bend: 0.36, segments: 7, thickness: 0.055, draw: 0.36, wood: RECURVE_WOOD },
 }
 
 export class BowView {

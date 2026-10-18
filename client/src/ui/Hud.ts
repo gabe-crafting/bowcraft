@@ -210,9 +210,14 @@ export class Hud {
 }
 
 function bowMarkup(kind: WeaponKind | null): string {
-  const wood = kind === 'shortbow' ? '#c49255' : kind === 'longbow' ? '#6b3f24' : '#8a8175'
-  const stave = kind === 'shortbow' ? 'M22 14 C34 24 34 40 22 50' : 'M20 6 C36 20 36 44 20 58'
-  const string = kind === 'shortbow' ? 'M22 14 L22 50' : 'M20 6 L20 58'
+  const wood = kind === 'shortbow' ? '#c49255' : kind === 'recurve' ? '#8a3b2a' : kind === 'longbow' ? '#6b3f24' : '#8a8175'
+  const stave =
+    kind === 'shortbow'
+      ? 'M22 14 C34 24 34 40 22 50'
+      : kind === 'recurve'
+        ? 'M24 8 C10 16 10 48 24 56'
+        : 'M20 6 C36 20 36 44 20 58'
+  const string = kind === 'shortbow' ? 'M22 14 L22 50' : kind === 'recurve' ? 'M24 8 L24 56' : 'M20 6 L20 58'
   return `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="${stave}" fill="none" stroke="${wood}" stroke-width="4" stroke-linecap="round"/><path d="${string}" fill="none" stroke="#f4f0e8" stroke-width="1.5"/></svg>`
 }
 

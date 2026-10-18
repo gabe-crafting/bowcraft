@@ -14,6 +14,9 @@ export interface InputMessage {
   left: boolean
   right: boolean
   aim: number
+  /** Ground point under the cursor. Lobs and hooks land here. */
+  aimX: number
+  aimZ: number
   shoot: boolean
   /** 0 is the bow. 1, 2, 3, and 4 are the picked-up arrow slots. */
   slot: number
@@ -61,8 +64,10 @@ export interface ProjectileSnapshot {
   id: string
   ownerId: string
   x: number
+  y: number
   z: number
   dirX: number
+  dirY: number
   dirZ: number
   arrow: ShotArrow
 }
@@ -85,6 +90,7 @@ export interface DummySnapshot {
 
 export interface ExplosionSnapshot {
   id: string
+  ownerId: string
   x: number
   z: number
   radius: number
@@ -144,6 +150,8 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
       !isBoolean(value.right) ||
       !isBoolean(value.shoot) ||
       !isFiniteNumber(value.aim) ||
+      !isFiniteNumber(value.aimX) ||
+      !isFiniteNumber(value.aimZ) ||
       !isSlot(value.slot)
     ) {
       return null
@@ -155,6 +163,8 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
       left: value.left,
       right: value.right,
       aim: value.aim,
+      aimX: value.aimX,
+      aimZ: value.aimZ,
       shoot: value.shoot,
       slot: value.slot,
     }
@@ -205,15 +215,17 @@ function parsePlayer(value: unknown): PlayerSnapshot | null {
 function parseProjectile(value: unknown): ProjectileSnapshot | null {
   if (!isRecord(value)) return null
   if (!isShortId(value.id) || !isShortId(value.ownerId)) return null
-  if (!isFiniteNumber(value.x) || !isFiniteNumber(value.z)) return null
-  if (!isFiniteNumber(value.dirX) || !isFiniteNumber(value.dirZ)) return null
+  if (!isFiniteNumber(value.x) || !isFiniteNumber(value.y) || !isFiniteNumber(value.z)) return null
+  if (!isFiniteNumber(value.dirX) || !isFiniteNumber(value.dirY) || !isFiniteNumber(value.dirZ)) return null
   if (!isShotArrow(value.arrow)) return null
   return {
     id: value.id,
     ownerId: value.ownerId,
     x: value.x,
+    y: value.y,
     z: value.z,
     dirX: value.dirX,
+    dirY: value.dirY,
     dirZ: value.dirZ,
     arrow: value.arrow,
   }
@@ -237,11 +249,18 @@ function parseDummy(value: unknown): DummySnapshot | null {
 
 function parseExplosion(value: unknown): ExplosionSnapshot | null {
   if (!isRecord(value)) return null
-  if (!isShortId(value.id)) return null
+  if (!isShortId(value.id) || !isShortId(value.ownerId)) return null
   if (!isFiniteNumber(value.x) || !isFiniteNumber(value.z)) return null
   if (!isFiniteNumber(value.radius) || value.radius <= 0) return null
   if (!isFiniteNumber(value.ageMs) || value.ageMs < 0) return null
-  return { id: value.id, x: value.x, z: value.z, radius: value.radius, ageMs: value.ageMs }
+  return {
+    id: value.id,
+    ownerId: value.ownerId,
+    x: value.x,
+    z: value.z,
+    radius: value.radius,
+    ageMs: value.ageMs,
+  }
 }
 
 function parseWeapon(value: unknown): WeaponSnapshot | null {

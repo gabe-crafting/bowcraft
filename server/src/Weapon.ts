@@ -1,11 +1,5 @@
-import {
-  BOWS,
-  PLAYER_RADIUS,
-  PROJECTILE_SPAWN_CLEARANCE,
-  type ProjectileSpec,
-  type ShotArrow,
-  type WeaponKind,
-} from '@bounty/shared'
+import { BOWS, type ProjectileSpec, type ShotArrow, type WeaponKind } from '@bounty/shared'
+import { planLaunch } from './ballistics'
 import { Projectile } from './Projectile'
 
 let nextWeaponId = 1
@@ -35,18 +29,24 @@ export class Weapon {
     x: number,
     z: number,
     aim: number,
+    targetX: number,
+    targetZ: number,
     spec: ProjectileSpec = this.spec,
     arrow: ShotArrow = 'normal',
   ): Projectile {
-    const dirX = Math.sin(aim)
-    const dirZ = Math.cos(aim)
-    const spawnDistance = PLAYER_RADIUS + spec.radius + PROJECTILE_SPAWN_CLEARANCE
+    const launch = planLaunch(spec, x, z, aim, targetX, targetZ)
     return new Projectile(
       ownerId,
-      x + dirX * spawnDistance,
-      z + dirZ * spawnDistance,
-      dirX,
-      dirZ,
+      launch.x,
+      launch.y,
+      launch.z,
+      launch.vx,
+      launch.vy,
+      launch.vz,
+      launch.landX,
+      launch.landZ,
+      launch.bendX,
+      launch.bendZ,
       spec,
       arrow,
     )

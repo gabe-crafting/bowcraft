@@ -18,6 +18,8 @@ const IDLE_INPUT: InputMessage = {
   left: false,
   right: false,
   aim: 0,
+  aimX: 0,
+  aimZ: 0,
   shoot: false,
   slot: 0,
 }

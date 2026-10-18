@@ -70,6 +70,8 @@ export class SceneManager {
   private readonly hud: Hud
   private readonly playerId: string
   private readonly scene = new Scene()
+  /** The local hunter's own arrows and blasts, drawn after the fog. */
+  private readonly revealed = new Scene()
   private readonly camera: PerspectiveCamera
   private readonly renderer: WebGLRenderer
   private readonly arena = new Arena()
@@ -88,6 +90,8 @@ export class SceneManager {
   private readonly aimPoint = new Vector3()
   private readonly labelPoint = new Vector3()
   private lastAim = 0
+  private lastAimX = 0
+  private lastAimZ = 0
   private readonly knownShots = new Set<string>()
   private raf = 0
   private stopped = false
@@ -180,8 +184,8 @@ export class SceneManager {
       if (local) {
         const aim = this.aimFrom(local.x, local.z)
         const flares = sample.projectiles.filter((projectile) => projectile.arrow === 'flare')
-        this.fog.follow(local.x, local.z, aim, this.camera, flares)
-        this.connection.sendInput(this.input.consume(aim))
+        this.fog.follow(local.x, local.z, aim.aim, this.camera, flares)
+        this.connection.sendInput(this.input.consume(aim.aim, aim.x, aim.z))
         this.updateWeaponMenu(local, sample.weapons)
       } else {
         this.radial.setOpen(false)
@@ -189,7 +193,7 @@ export class SceneManager {
       this.updateHud(sample.players, sample.weapons)
     }
 
-    this.fog.render(this.renderer, this.scene, this.camera)
+    this.fog.render(this.renderer, this.scene, this.camera, this.revealed)
     this.raf = requestAnimationFrame(this.frame)
   }
 
@@ -199,9 +203,11 @@ export class SceneManager {
     this.camera.lookAt(local.x, CAMERA_LOOK_HEIGHT, local.z)
   }
 
-  private aimFrom(originX: number, originZ: number): number {
+  private aimFrom(originX: number, originZ: number): { aim: number; x: number; z: number } {
     const rect = this.renderer.domElement.getBoundingClientRect()
-    if (rect.width === 0 || rect.height === 0) return this.lastAim
+    if (rect.width === 0 || rect.height === 0) {
+      return { aim: this.lastAim, x: this.lastAimX, z: this.lastAimZ }
+    }
 
     const pointer = this.input.pointer
     this.pointer.set(
@@ -210,10 +216,12 @@ export class SceneManager {
     )
     this.raycaster.setFromCamera(this.pointer, this.camera)
     const hit = this.raycaster.ray.intersectPlane(this.ground, this.aimPoint)
-    if (!hit) return this.lastAim
+    if (!hit) return { aim: this.lastAim, x: this.lastAimX, z: this.lastAimZ }
 
     this.lastAim = Math.atan2(hit.x - originX, hit.z - originZ)
-    return this.lastAim
+    this.lastAimX = hit.x
+    this.lastAimZ = hit.z
+    return { aim: this.lastAim, x: hit.x, z: hit.z }
   }
 
   private syncPlayers(
@@ -257,10 +265,11 @@ export class SceneManager {
       let view = this.projectileViews.get(projectile.id)
       if (!view) {
         view = new ProjectileView(projectile.arrow)
-        this.scene.add(view.group)
+        const parent = projectile.ownerId === this.playerId ? this.revealed : this.scene
+        parent.add(view.group)
         this.projectileViews.set(projectile.id, view)
       }
-      view.setPose(projectile.x, projectile.z, projectile.dirX, projectile.dirZ)
+      view.setPose(projectile.x, projectile.y, projectile.z, projectile.dirX, projectile.dirY, projectile.dirZ)
     }
     this.dropMissing(this.projectileViews, seen)
     for (const id of this.knownShots) {
@@ -322,7 +331,8 @@ export class SceneManager {
       let view = this.explosionViews.get(blast.id)
       if (!view) {
         view = new ExplosionView()
-        this.scene.add(view.group)
+        const parent = blast.ownerId === this.playerId ? this.revealed : this.scene
+        parent.add(view.group)
         this.explosionViews.set(blast.id, view)
       }
       view.setBlast(blast.x, blast.z, blast.radius, blast.ageMs)

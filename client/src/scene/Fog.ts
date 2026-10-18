@@ -276,7 +276,7 @@ export class Fog {
     }
   }
 
-  render(renderer: WebGLRenderer, scene: Scene, camera: Camera): void {
+  render(renderer: WebGLRenderer, scene: Scene, camera: Camera, revealed?: Scene): void {
     renderer.setRenderTarget(null)
     renderer.autoClear = true
     renderer.render(scene, camera)
@@ -287,6 +287,7 @@ export class Fog {
     renderer.setRenderTarget(null)
     renderer.autoClear = false
     renderer.render(this.quadScene, this.quadCamera)
+    if (revealed && revealed.children.length > 0) renderer.render(revealed, camera)
     renderer.autoClear = true
   }
 

@@ -4,6 +4,7 @@ export class Explosion {
   readonly id: string
 
   constructor(
+    readonly ownerId: string,
     readonly x: number,
     readonly z: number,
     readonly radius: number,

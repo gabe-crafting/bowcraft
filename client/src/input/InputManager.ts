@@ -62,7 +62,7 @@ export class InputManager {
     this.slot = slot
   }
 
-  consume(aim: number): FrameInput {
+  consume(aim: number, aimX: number, aimZ: number): FrameInput {
     const shoot = !this.menuDown && (this.shootLatched || this.primaryDown)
     this.shootLatched = false
     return {
@@ -71,6 +71,8 @@ export class InputManager {
       left: this.held('KeyA', 'ArrowLeft'),
       right: this.held('KeyD', 'ArrowRight'),
       aim,
+      aimX,
+      aimZ,
       shoot,
       slot: this.slot,
     }

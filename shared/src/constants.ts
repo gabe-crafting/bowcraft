@@ -31,18 +31,36 @@ export const MAX_HP = 100
 export const PROJECTILE_RADIUS = 0.1
 export const PROJECTILE_SPAWN_CLEARANCE = 0.08
 export const PROJECTILE_Y = 1
+/** Pulls every arrow down. A flat shot from chest height lands in a short distance. */
+export const ARROW_GRAVITY = 9.2
+/** How long a fallen arrow stays visible before it is cleared. */
+export const ARROW_REST_MS = 650
+/** Hunters and dummies can be hit while the arrow is at or below this height. */
+export const HUNTER_HIT_HEIGHT = 1.7
+/** Walls and trunks stop an arrow only while it is at or below this height. */
+export const COVER_PASS_HEIGHT = 1.35
+export const TREE_TRUNK_HEIGHT = 1.15
 
-/** Heavy draw, long reach, slow to loose again. */
+/** Heavy draw. Lobs onto the clicked ground. */
 export const LONGBOW_DAMAGE = 45
 export const LONGBOW_SPEED = 36
 export const LONGBOW_RANGE = 42
 export const LONGBOW_COOLDOWN_MS = 720
+/** Extra hang time so a longbow rises before it falls. */
+export const LONGBOW_LOFT = 0.85
 
-/** Light draw, shorter reach, quick to loose again. */
+/** Light draw. Flies straight along the hunter's facing and drops early. */
 export const SHORTBOW_DAMAGE = 22
 export const SHORTBOW_SPEED = 30
 export const SHORTBOW_RANGE = 24
 export const SHORTBOW_COOLDOWN_MS = 320
+
+/** Curved shot. Longer reach, slower to loose, and one hook around cover. */
+export const RECURVE_DAMAGE = 36
+export const RECURVE_SPEED = 34
+export const RECURVE_RANGE = 56
+export const RECURVE_COOLDOWN_MS = 1100
+export const RECURVE_LOFT = 0.55
 export const EXPLOSION_RADIUS = 2.5
 /** How long the blast stays on screen. */
 export const EXPLOSION_ANIM_MS = 640

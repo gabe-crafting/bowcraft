@@ -60,7 +60,7 @@ export const ARROWS: Record<ArrowKind, ArrowProfile> = {
   },
   explosion: {
     name: 'Explosion arrow',
-    detail: 'Bursts on walls, trees, and hunters.',
+    detail: 'Bursts on the ground, walls, trees, and hunters.',
     damageScale: 0.7,
     speedScale: 0.95,
     rangeScale: 0.9,
@@ -126,5 +126,6 @@ export function arrowShot(bow: ProjectileSpec, arrow: ShotArrow): ProjectileSpec
     ricochets: profile.ricochets,
     explosionRadius: profile.explodes ? EXPLOSION_RADIUS : bow.explosionRadius,
     fireCooldownMs: bow.fireCooldownMs,
+    trajectory: bow.trajectory,
   }
 }
