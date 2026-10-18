@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { Buffer } from 'node:buffer'
+import { createServer } from 'node:http'
 import {
   MAX_CLIENT_MESSAGE_CHARS,
   MAX_PLAYERS,
@@ -9,6 +10,7 @@ import {
   type ServerMessage,
 } from '@bounty/shared'
 import { WebSocket, WebSocketServer, type RawData } from 'ws'
+import { clientDirectory, serveClient } from './files'
 import { Game } from './Game'
 import { sanitizeUsername } from './sanitize'
 
@@ -42,11 +44,8 @@ function startLoop(): void {
   setTimeout(step, TICK_MS)
 }
 
-const wss = new WebSocketServer({ port: SERVER_PORT }, () => {
-  console.log(`server listening on ws://localhost:${SERVER_PORT}`)
-})
-
-wss.on('connection', (socket) => {
+function attach(wss: WebSocketServer): void {
+  wss.on('connection', (socket) => {
   let playerId: string | null = null
   let username = ''
 
@@ -105,11 +104,36 @@ wss.on('connection', (socket) => {
   socket.on('error', () => {
     socket.close()
   })
-})
+  })
+}
 
-wss.on('error', (error) => {
-  console.error(error)
-  process.exit(1)
-})
+function listen(): void {
+  const publicPort = process.env.PORT
+  if (!publicPort) {
+    const wss = new WebSocketServer({ port: SERVER_PORT, host: '0.0.0.0' }, () => {
+      console.log(`server listening on ws://localhost:${SERVER_PORT}`)
+    })
+    attach(wss)
+    wss.on('error', (error) => {
+      console.error(error)
+      process.exit(1)
+    })
+    return
+  }
+
+  const root = clientDirectory()
+  const httpServer = createServer((request, response) => {
+    void serveClient(root, request, response)
+  })
+  attach(new WebSocketServer({ server: httpServer }))
+  httpServer.on('error', (error) => {
+    console.error(error)
+    process.exit(1)
+  })
+  httpServer.listen(Number(publicPort), '0.0.0.0', () => {
+    console.log(`server listening on :${publicPort}`)
+  })
+}
 
 startLoop()
+listen()

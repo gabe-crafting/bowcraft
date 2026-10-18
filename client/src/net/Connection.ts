@@ -22,7 +22,11 @@ export class Connection {
 
   start(username: string, handlers: ConnectionHandlers): void {
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
-    const socket = new WebSocket(`${protocol}://${location.hostname}:${SERVER_PORT}`)
+    const url =
+      location.port === '5173'
+        ? `${protocol}://${location.hostname}:${SERVER_PORT}`
+        : `${protocol}://${location.host}`
+    const socket = new WebSocket(url)
     this.socket = socket
 
     socket.addEventListener('open', () => {
