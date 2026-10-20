@@ -1,0 +1,48 @@
+import bpy, math
+exec(open(r"C:\Users\gabe\Projects\Games\bounty-hunter\assets\blender\lowpoly.py").read())
+exec(open(r"C:\Users\gabe\Projects\Games\bounty-hunter\assets\blender\rig.py").read())
+R = math.radians
+C = new_collection("Ninja")
+gi = mat("Ninja_Gi", hexc(0x1c1f2b))
+gi2 = mat("Ninja_GiDark", hexc(0x12131a))
+wrap = mat("Ninja_Wrap", hexc(0x3a3d4a))
+sash = mat("Ninja_Sash", hexc(0x9e1b1b))
+skin = mat("Ninja_Skin", hexc(0xe2b08a))
+eye = mat("Ninja_Eye", hexc(0x111111))
+hair = mat("Ninja_Hair", hexc(0x1a1414))
+
+# slim wrapped legs, fitted trousers
+sym(box, C, "foot", (0.085, 0.21, 0.06), (0.085, -0.035, 0.03), gi2, top=(0.85, 0.8))
+sym(limb, C, "shin", (0.085, 0, 0.06), (0.09, 0, 0.44), 0.038, 0.052, wrap)
+sym(ball, C, "calf", 0.045, (0.09, 0.012, 0.29), wrap, seg=6, rings=4, scale=(0.9, 1, 2.0))
+sym(limb, C, "thigh", (0.09, 0, 0.42), (0.11, 0, 0.86), 0.06, 0.092, gi, verts=7)
+# wide hips into a narrow waist, red sash tied at the back
+box(C, "hips", (0.35, 0.2, 0.17), (0, 0, 0.88), gi, top=(0.62, 0.82))
+cyl(C, "sash", 0.12, 0.105, 0.07, (0, 0, 0.965), sash, verts=8, scale=(1, 0.78, 1))
+box(C, "knot", (0.07, 0.045, 0.06), (0.04, 0.095, 0.965), sash)
+box(C, "sash_tail1", (0.045, 0.014, 0.22), (0.03, 0.1, 0.83), sash, rot=(R(6), R(8), 0))
+box(C, "sash_tail2", (0.045, 0.014, 0.18), (0.07, 0.1, 0.85), sash, rot=(R(6), R(-10), 0))
+box(C, "waist", (0.15, 0.11, 0.14), (0, 0, 1.03), gi, top=(1.3, 1.2))
+box(C, "ribcage", (0.2, 0.14, 0.2), (0, 0, 1.19), gi, top=(1.22, 1.0))
+sym(ball, C, "chest", 0.068, (0.053, -0.062, 1.18), gi, seg=8, rings=6, scale=(1, 1, 0.88))
+sym(box, C, "collar", (0.03, 0.02, 0.12), (0.032, -0.08, 1.25), gi2, rot=(R(-10), R(-28), 0))
+# slender arms with wrapped forearms
+sym(ball, C, "shoulder", 0.052, (0.16, 0, 1.27), gi, seg=6, rings=4)
+sym(limb, C, "upperarm", (0.165, 0, 1.27), (0.225, 0, 1.02), 0.045, 0.037, gi)
+sym(limb, C, "forearm", (0.225, 0, 1.02), (0.27, -0.02, 0.8), 0.036, 0.028, wrap)
+sym(box, C, "hand", (0.038, 0.065, 0.085), (0.285, -0.02, 0.745), gi2, rot=(0, R(10), 0))
+cyl(C, "neck", 0.042, 0.042, 0.1, (0, 0, 1.34), gi2)
+# hood: flat-fronted mask block with a rounded crown, eye slit flush with the mask
+box(C, "hood", (0.17, 0.19, 0.19), (0, 0, 1.44), gi2, top=(0.88, 1.0))
+ball(C, "hood_crown", 0.095, (0, 0.005, 1.5), gi2, seg=8, rings=6, scale=(0.9, 0.98, 0.7))
+box(C, "eyeslit", (0.13, 0.02, 0.032), (0, -0.0865, 1.46), skin)
+sym(box, C, "eye", (0.025, 0.02, 0.011), (0.029, -0.0875, 1.46), eye, rot=(0, R(-8), 0))
+box(C, "headband", (0.162, 0.196, 0.03), (0, 0, 1.5), sash)
+box(C, "band_knot", (0.04, 0.03, 0.034), (0, 0.1, 1.5), sash)
+box(C, "band_tail1", (0.028, 0.012, 0.17), (0.026, 0.112, 1.42), sash, rot=(R(-20), R(10), 0))
+box(C, "band_tail2", (0.028, 0.012, 0.14), (-0.02, 0.112, 1.43), sash, rot=(R(-12), R(-12), 0))
+# long ponytail out of the back of the hood
+box(C, "pony_root", (0.055, 0.055, 0.05), (0, 0.1, 1.54), hair)
+box(C, "ponytail", (0.085, 0.05, 0.4), (0, 0.13, 1.34), hair, top=(0.7, 1.1), rot=(R(10), 0, 0))
+box(C, "pony_tip", (0.06, 0.035, 0.08), (0, 0.16, 1.11), hair, top=(1.5, 1.4))
+rig_character(C, "Ninja", 0.0)

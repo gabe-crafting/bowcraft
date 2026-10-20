@@ -2,3 +2,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 .vite/
+
+# Blender save backups
+*.blend1
